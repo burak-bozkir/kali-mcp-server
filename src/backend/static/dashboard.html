@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kali MCP Server</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --accent: #22d3ee;
+            --accent-2: #6366f1;
+            --ok: #22c55e;
+            --warn: #f59e0b;
+            --err: #ef4444;
+            --radius: 14px;
+            --font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+            --mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code', Consolas, monospace;
+        }
+        /* Dark theme (default) */
+        :root, :root[data-theme="dark"] {
+            --bg: #0b1020;
+            --bg-grad: radial-gradient(1200px 600px at 15% -10%, #16233f 0%, transparent 60%), radial-gradient(1000px 500px at 100% 0%, #1b1636 0%, transparent 55%), #0b1020;
+            --surface: rgba(255,255,255,0.045);
+            --surface-2: rgba(255,255,255,0.07);
+            --border: rgba(255,255,255,0.10);
+            --border-strong: rgba(34,211,238,0.35);
+            --text: #e6eaf2;
+            --text-dim: #93a0b8;
+            --text-faint: #5f6c86;
+            --shadow: 0 10px 30px rgba(0,0,0,0.35);
+            --input-bg: rgba(255,255,255,0.04);
+        }
+        :root[data-theme="light"] {
+            --bg: #f3f5fb;
+            --bg-grad: radial-gradient(1200px 600px at 10% -10%, #dbeafe 0%, transparent 55%), radial-gradient(1000px 500px at 100% 0%, #ede9fe 0%, transparent 55%), #f3f5fb;
+            --surface: #ffffff;
+            --surface-2: #f7f9fd;
+            --border: #e3e8f2;
+            --border-strong: rgba(99,102,241,0.35);
+            --text: #16233f;
+            --text-dim: #55627d;
+            --text-faint: #93a0b8;
+            --shadow: 0 10px 30px rgba(20,35,63,0.08);
+            --input-bg: #f7f9fd;
+            --accent: #0891b2;
+            --accent-2: #4f46e5;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            font-family: var(--font);
+            background: var(--bg-grad);
+            background-attachment: fixed;
+            color: var(--text);
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .wrap { max-width: 1600px; margin: 0 auto; padding: 22px; }
+
+        /* Top bar */
+        .topbar {
+            display: flex; align-items: center; gap: 18px;
+            padding: 16px 20px; margin-bottom: 20px;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); box-shadow: var(--shadow);
+            backdrop-filter: blur(8px);
+        }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand .logo {
+            width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+            background: linear-gradient(135deg, var(--accent), var(--accent-2));
+            color: #fff; font-size: 20px; box-shadow: 0 6px 18px rgba(34,211,238,0.35);
+        }
+        .brand h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.2px; }
+        .brand .sub { font-size: 11.5px; color: var(--text-faint); font-weight: 500; }
+        .topbar-spacer { flex: 1; }
+        .health {
+            display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600;
+            padding: 8px 14px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border);
+            color: var(--text-dim);
+        }
+        .health .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text-faint); }
+        .health.up .dot { background: var(--ok); box-shadow: 0 0 0 4px rgba(34,197,94,0.18); }
+        .health.down .dot { background: var(--err); box-shadow: 0 0 0 4px rgba(239,68,68,0.18); }
+        .icon-btn {
+            width: 40px; height: 40px; border-radius: 11px; border: 1px solid var(--border);
+            background: var(--surface-2); color: var(--text); cursor: pointer; font-size: 17px;
+            display: grid; place-items: center; transition: .2s;
+        }
+        .icon-btn:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+
+        /* Stats */
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 20px; }
+        .stat {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            padding: 18px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+        }
+        .stat::after {
+            content: ""; position: absolute; right: -20px; top: -20px; width: 90px; height: 90px;
+            border-radius: 50%; background: radial-gradient(circle, var(--accent) 0%, transparent 70%); opacity: .10;
+        }
+        .stat .label { font-size: 12px; color: var(--text-dim); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+        .stat .value { font-size: 30px; font-weight: 700; margin-top: 6px; letter-spacing: -0.5px; }
+        .stat .value small { font-size: 15px; color: var(--text-faint); font-weight: 500; }
+
+        /* Grid layout */
+        .grid { display: grid; grid-template-columns: 340px 1fr 360px; gap: 20px; align-items: start; }
+        .card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+        .card-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px;
+            padding: 16px 18px; border-bottom: 1px solid var(--border);
+        }
+        .card-head h2 { font-size: 14px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .card-body { padding: 18px; }
+
+        /* Form */
+        .field { margin-bottom: 15px; }
+        .field label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dim); margin-bottom: 7px; }
+        input, select, textarea {
+            width: 100%; background: var(--input-bg); border: 1px solid var(--border); color: var(--text);
+            padding: 11px 13px; border-radius: 10px; font-size: 13.5px; font-family: var(--font); transition: .15s;
+        }
+        textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
+        select { cursor: pointer; }
+        .hint { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
+        .param-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .chip {
+            font-family: var(--mono); font-size: 11px; padding: 4px 9px; border-radius: 7px; cursor: pointer;
+            background: var(--surface-2); border: 1px solid var(--border); color: var(--accent); transition: .15s;
+        }
+        .chip:hover { border-color: var(--accent); }
+        .chip b { color: var(--text); font-weight: 600; }
+
+        .btn {
+            width: 100%; border: none; border-radius: 11px; padding: 13px; font-size: 14px; font-weight: 700;
+            cursor: pointer; font-family: var(--font); transition: .18s; display: flex; align-items: center; justify-content: center; gap: 9px;
+        }
+        .btn-primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; box-shadow: 0 8px 20px rgba(34,211,238,0.30); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(34,211,238,0.40); }
+        .btn-primary:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn-danger { background: rgba(239,68,68,0.12); color: var(--err); border: 1px solid rgba(239,68,68,0.4); }
+        .btn-danger:hover { background: rgba(239,68,68,0.22); }
+
+        .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Status message */
+        .status { margin-top: 14px; padding: 11px 13px; border-radius: 10px; font-size: 12.5px; font-weight: 500; display: none; }
+        .status.show { display: block; }
+        .status.info { background: rgba(34,211,238,0.10); border: 1px solid var(--border-strong); color: var(--accent); }
+        .status.error { background: rgba(239,68,68,0.10); border: 1px solid rgba(239,68,68,0.4); color: var(--err); }
+        .status.ok { background: rgba(34,197,94,0.10); border: 1px solid rgba(34,197,94,0.4); color: var(--ok); }
+
+        /* Progress */
+        .progress { margin-top: 14px; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; display: none; border: 1px solid var(--border); }
+        .progress.show { display: block; }
+        .progress .fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s ease; }
+
+        /* Tabs */
+        .tabs { display: flex; gap: 6px; }
+        .tab {
+            font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: 9px; cursor: pointer;
+            color: var(--text-dim); border: 1px solid transparent; transition: .15s;
+        }
+        .tab.active { background: var(--surface-2); color: var(--accent); border-color: var(--border); }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
+        /* Console */
+        .console {
+            font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: #060912; color: #cdd6e4;
+            border-radius: 11px; padding: 14px; height: 460px; overflow-y: auto; border: 1px solid var(--border);
+            white-space: pre-wrap; word-break: break-word;
+        }
+        :root[data-theme="light"] .console { background: #0b1020; }
+        .console .line { display: block; }
+        .console .line.err { color: #fca5a5; }
+        .console .line.sys { color: #7dd3fc; }
+        .console .line.done { color: #86efac; }
+        .console .empty { color: var(--text-faint); font-family: var(--font); }
+        .console::-webkit-scrollbar, .list::-webkit-scrollbar, .console-detail::-webkit-scrollbar { width: 9px; }
+        .console::-webkit-scrollbar-thumb, .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 9px; }
+
+        /* Detail */
+        .detail-row { padding: 11px 0; border-bottom: 1px solid var(--border); }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-row .k { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+        .detail-row .v { font-size: 13px; margin-top: 3px; word-break: break-word; }
+        .detail-row .v.mono { font-family: var(--mono); font-size: 12px; }
+        .console-detail {
+            font-family: var(--mono); font-size: 12px; line-height: 1.55; background: #060912; color: #cdd6e4;
+            border-radius: 10px; padding: 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin-top: 6px;
+        }
+        .badge { font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+        .badge.ok { background: rgba(34,197,94,0.15); color: var(--ok); }
+        .badge.err { background: rgba(239,68,68,0.15); color: var(--err); }
+
+        /* History list */
+        .list { display: flex; flex-direction: column; gap: 9px; max-height: 640px; overflow-y: auto; padding-right: 4px; }
+        .hist {
+            background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--text-faint);
+            border-radius: 10px; padding: 11px 13px; cursor: pointer; transition: .15s;
+        }
+        .hist:hover { border-color: var(--border-strong); transform: translateX(2px); }
+        .hist.ok { border-left-color: var(--ok); }
+        .hist.err { border-left-color: var(--err); }
+        .hist.active { background: var(--surface); border-color: var(--accent); }
+        .hist .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+        .hist .tool { font-weight: 700; font-size: 13px; text-transform: capitalize; }
+        .hist .cmd { font-family: var(--mono); font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .hist .meta { font-size: 10.5px; color: var(--text-faint); margin-top: 4px; }
+        .empty-state { color: var(--text-faint); font-size: 13px; text-align: center; padding: 30px 10px; }
+
+        /* Tools status strip */
+        .tools-strip { margin-top: 20px; }
+        .tools-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+        .tool-pill {
+            display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-radius: 11px;
+            background: var(--surface-2); border: 1px solid var(--border);
+        }
+        .tool-pill .st { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--text-faint); }
+        .tool-pill.on .st { background: var(--ok); box-shadow: 0 0 0 3px rgba(34,197,94,0.16); }
+        .tool-pill.off .st { background: var(--err); }
+        .tool-pill .nm { font-size: 12.5px; font-weight: 600; }
+        .tool-pill .ds { font-size: 10.5px; color: var(--text-faint); }
+
+        /* Templates */
+        .tpl-scroll { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(210px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 6px; }
+        @media (max-width: 900px) { .tpl-scroll { grid-auto-flow: row; grid-auto-columns: unset; grid-template-columns: 1fr; } }
+        .tpl {
+            background: var(--surface-2); border: 1px solid var(--border); border-radius: 12px; padding: 13px;
+            display: flex; flex-direction: column; gap: 7px; transition: .15s; position: relative;
+        }
+        .tpl:hover { border-color: var(--border-strong); }
+        .tpl .thead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .tpl .tname { font-weight: 700; font-size: 13px; line-height: 1.25; }
+        .tpl .ttool { font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 6px; background: rgba(34,211,238,0.12); color: var(--accent); text-transform: uppercase; flex-shrink: 0; }
+        .tpl .tdesc { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; min-height: 32px; }
+        .tpl .tparams { font-family: var(--mono); font-size: 10.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .tpl .tactions { display: flex; gap: 6px; margin-top: 2px; }
+        .tpl .tbtn { flex: 1; font-size: 11.5px; font-weight: 600; padding: 7px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; transition: .15s; }
+        .tpl .tbtn:hover { border-color: var(--accent); color: var(--accent); }
+        .tpl .tbtn.run { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+        .tpl .tbtn.run:hover { color: #fff; opacity: .92; }
+        .tpl .tdel { position: absolute; top: 8px; right: 8px; width: 20px; height: 20px; border-radius: 6px; border: none; background: transparent; color: var(--text-faint); cursor: pointer; font-size: 13px; opacity: .5; transition: .15s; }
+        .tpl:hover .tdel { opacity: 1; }
+        .tpl .tdel:hover { color: var(--err); }
+        .tpl .tbadge { font-size: 9.5px; color: var(--text-faint); font-weight: 600; }
+
+        /* Modal */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); width: 100%; max-width: 440px; }
+        :root[data-theme="dark"] .modal, :root:not([data-theme="light"]) .modal { background: #141b2e; }
+        .modal-head { padding: 16px 18px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 15px; }
+        .modal-body { padding: 18px; }
+        .modal-foot { padding: 14px 18px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; }
+        .btn-sm { padding: 9px 16px; border-radius: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+        .btn-sm.primary { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; border: none; }
+
+        /* Findings view */
+        .f-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+        .f-kpi { background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px; padding: 12px; text-align: center; }
+        .f-kpi .n { font-size: 24px; font-weight: 700; }
+        .f-kpi .l { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+        .f-title { font-size: 13px; font-weight: 700; color: var(--accent); margin: 16px 0 9px; }
+        .f-title:first-child { margin-top: 0; }
+        .ports-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        .ports-table th { text-align: left; color: var(--text-faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; padding: 7px 9px; border-bottom: 1px solid var(--border); }
+        .ports-table td { padding: 9px; border-bottom: 1px solid var(--border); }
+        .ports-table .p { font-family: var(--mono); font-weight: 700; color: var(--accent); }
+        .ports-table .vmono { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); }
+        .sev { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+        .sev.high { background: rgba(239,68,68,.15); color: var(--err); }
+        .sev.medium { background: rgba(245,158,11,.15); color: var(--warn); }
+        .sev.low { background: rgba(34,197,94,.14); color: var(--ok); }
+        .sev.info { background: rgba(34,211,238,.12); color: var(--accent); }
+        .finding { display: flex; gap: 11px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); margin-bottom: 8px; align-items: flex-start; }
+        .finding .fdot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
+        .finding.high .fdot { background: var(--err); } .finding.medium .fdot { background: var(--warn); }
+        .finding.low .fdot { background: var(--ok); } .finding.info .fdot { background: var(--accent); }
+        .finding .ft { font-weight: 600; font-size: 13px; }
+        .finding .fd { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; word-break: break-word; }
+        .finding .fright { margin-left: auto; }
+
+        @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2,1fr); } }
+        @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } .wrap { padding: 14px; } .f-kpis { grid-template-columns: repeat(2,1fr); } }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <!-- Top bar -->
+        <div class="topbar">
+            <div class="brand">
+                <div class="logo">🛡️</div>
+                <div>
+                    <h1>Kali MCP Server</h1>
+                    <div class="sub">Interactive Penetration Testing Dashboard</div>
+                </div>
+            </div>
+            <div class="topbar-spacer"></div>
+            <div class="health" id="health"><span class="dot"></span><span id="health-text">Bağlanıyor…</span></div>
+            <button class="icon-btn" id="theme-btn" title="Tema değiştir" onclick="toggleTheme()">🌙</button>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats">
+            <div class="stat"><div class="label">Toplam Tarama</div><div class="value" id="s-total">0</div></div>
+            <div class="stat"><div class="label">Başarı Oranı</div><div class="value" id="s-rate">0<small>%</small></div></div>
+            <div class="stat"><div class="label">Kullanılabilir Araç</div><div class="value" id="s-tools">0<small> / 10</small></div></div>
+            <div class="stat"><div class="label">Aktif Tarama</div><div class="value" id="s-active">—</div></div>
+        </div>
+
+        <!-- Templates -->
+        <div class="card" style="margin-bottom:20px">
+            <div class="card-head">
+                <h2>⚡ Tarama Şablonları</h2>
+                <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Yenile" onclick="loadTemplates()">↻</button>
+            </div>
+            <div class="card-body">
+                <div class="tpl-scroll" id="templates"><div class="empty-state">Yükleniyor…</div></div>
+            </div>
+        </div>
+
+        <!-- Main grid -->
+        <div class="grid">
+            <!-- Scan form -->
+            <div class="card">
+                <div class="card-head"><h2>🎯 Yeni Tarama</h2></div>
+                <div class="card-body">
+                    <div class="field">
+                        <label>Hedef (IP / domain)</label>
+                        <input type="text" id="target" placeholder="192.168.1.10 veya example.com" autocomplete="off">
+                    </div>
+                    <div class="field">
+                        <label>Araç</label>
+                        <select id="tool" onchange="onToolChange()">
+                            <option value="nmap">Nmap — Port Tarama</option>
+                            <option value="gobuster">Gobuster — Dizin Keşfi</option>
+                            <option value="dirb">Dirb — Web Tarayıcı</option>
+                            <option value="nikto">Nikto — Web Sunucu Tarayıcı</option>
+                            <option value="sqlmap">SQLmap — SQL Injection</option>
+                            <option value="enum4linux">Enum4linux — SMB/Samba</option>
+                            <option value="metasploit">Metasploit — Framework</option>
+                            <option value="hydra">Hydra — Brute Force</option>
+                            <option value="john">John — Parola Kırma</option>
+                            <option value="wpscan">WPScan — WordPress</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label>Ek Parametreler <span id="param-help" style="color:var(--text-faint);font-weight:400"></span></label>
+                        <textarea id="params" rows="2" placeholder="Opsiyonel"></textarea>
+                        <div class="param-chips" id="chips"></div>
+                    </div>
+                    <div class="field" id="wordlist-field">
+                        <label>Özel Wordlist (opsiyonel)</label>
+                        <input type="text" id="wordlist" placeholder="/usr/share/wordlists/dirb/common.txt">
+                    </div>
+                    <button class="btn btn-primary" id="run-btn" onclick="runScan()"><span id="run-label">▶ Taramayı Başlat</span></button>
+                    <button class="btn btn-danger" id="cancel-btn" style="display:none;margin-top:10px" onclick="cancelScan()">⊗ Taramayı İptal Et</button>
+                    <button class="tbtn" style="width:100%;margin-top:10px;padding:11px;border-radius:11px" onclick="openSaveTemplate()">💾 Şablon Olarak Kaydet</button>
+                    <div class="status" id="status"></div>
+                    <div class="progress" id="progress"><div class="fill" id="progress-fill"></div></div>
+                </div>
+            </div>
+
+            <!-- Live output / details -->
+            <div class="card">
+                <div class="card-head">
+                    <div class="tabs">
+                        <div class="tab active" data-tab="live" onclick="switchTab('live')">🔴 Canlı Çıktı</div>
+                        <div class="tab" data-tab="findings" onclick="switchTab('findings')">🎯 Bulgular</div>
+                        <div class="tab" data-tab="detail" onclick="switchTab('detail')">📊 Ham Detay</div>
+                    </div>
+                    <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Konsolu temizle" onclick="clearConsole()">🗑️</button>
+                </div>
+                <div class="card-body">
+                    <div class="tab-panel active" id="panel-live">
+                        <div class="console" id="console"><span class="empty">Tarama başlatıldığında canlı çıktı burada akacak…</span></div>
+                    </div>
+                    <div class="tab-panel" id="panel-findings">
+                        <div id="findings"><div class="empty-state">Ayrıştırılmış bulguları görmek için geçmişten bir tarama seçin.</div></div>
+                    </div>
+                    <div class="tab-panel" id="panel-detail">
+                        <div id="detail"><div class="empty-state">Detayları görmek için geçmişten bir tarama seçin.</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History -->
+            <div class="card">
+                <div class="card-head">
+                    <h2>📋 Tarama Geçmişi</h2>
+                    <div style="display:flex;gap:6px">
+                        <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Özet PDF raporu" onclick="downloadSummary()">📄</button>
+                        <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Yenile" onclick="loadHistory()">↻</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="list" id="history"><div class="empty-state">Henüz tarama yok</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tools status -->
+        <div class="card tools-strip">
+            <div class="card-head"><h2>🧰 Araç Durumu</h2><span class="hint" id="tools-updated"></span></div>
+            <div class="card-body"><div class="tools-grid" id="tools-grid"><div class="empty-state">Yükleniyor…</div></div></div>
+        </div>
+    </div>
+
+    <!-- Socket.IO client: served locally (works offline); falls back to CDN if missing -->
+    <!-- Save template modal -->
+    <div class="modal-overlay" id="tpl-modal">
+        <div class="modal">
+            <div class="modal-head">💾 Şablon Olarak Kaydet</div>
+            <div class="modal-body">
+                <div class="field"><label>Şablon Adı</label><input type="text" id="tpl-name" placeholder="Örn: Hızlı Web Taraması"></div>
+                <div class="field"><label>Açıklama (opsiyonel)</label><input type="text" id="tpl-desc" placeholder="Bu şablon ne yapar?"></div>
+                <div class="hint" id="tpl-preview"></div>
+            </div>
+            <div class="modal-foot">
+                <button class="btn-sm" onclick="closeSaveTemplate()">İptal</button>
+                <button class="btn-sm primary" onclick="saveTemplate()">Kaydet</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/socket.io.min.js"></script>
+    <script>
+      if (typeof io === 'undefined') {
+        document.write('<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"><\/script>');
+      }
+    </script>
+    <script>
+    // ---------- Config: build request bodies per tool ----------
+    const API = location.origin;
+    const PARAM_HELP = {
+        nmap: '-sV -sC -A  •  -p 1-1000  •  -O',
+        gobuster: '-t 50 -x php,html',
+        dirb: '-r -w',
+        nikto: '-p 443 -Tuning 1',
+        sqlmap: '--dbs --batch',
+        enum4linux: '-a',
+        metasploit: 'LHOST=... LPORT=...',
+        hydra: '-t 4 -f  (service: ssh)',
+        john: '--format=raw-md5',
+        wpscan: '--enumerate vp'
+    };
+    const CHIPS = {
+        nmap: [['-sV','sürüm'],['-sC','script'],['-A','agresif'],['-p 1-1000','port'],['-O','OS'],['-T4','hız']],
+        gobuster: [['-t 50','thread'],['-x php,html','uzantı'],['-r','redirect']],
+        dirb: [['-r','no-recurse'],['-S','sessiz']],
+        nikto: [['-Tuning 1','tuning'],['-p 443','port']],
+        sqlmap: [['--dbs','DB listele'],['--batch','otomatik'],['--tables','tablolar'],['--level=3','seviye']],
+        enum4linux: [['-a','tümü'],['-U','kullanıcılar'],['-S','paylaşımlar']],
+        metasploit: [['LHOST=','listener IP'],['LPORT=4444','port']],
+        hydra: [['-t 4','görev'],['-f','ilkte dur']],
+        john: [['--format=raw-md5','format'],['--rules','kurallar']],
+        wpscan: [['--enumerate vp','pluginler'],['--random-user-agent','UA']]
+    };
+    // Which tools use the target as a URL vs raw target
+    function buildBody(tool, target, params, wordlist, scanId) {
+        const b = { scan_id: scanId };
+        const p = params || '';
+        switch (tool) {
+            case 'nmap': b.target = target; b.scan_type = '-sV'; b.additional_args = p; break;
+            case 'gobuster':
+                b.url = target.startsWith('http') ? target : 'http://' + target;
+                b.mode = 'dir'; if (wordlist) b.wordlist = wordlist; b.additional_args = p; break;
+            case 'dirb':
+                b.url = target.startsWith('http') ? target : 'http://' + target;
+                if (wordlist) b.wordlist = wordlist; b.additional_args = p; break;
+            case 'nikto': b.target = target.startsWith('http') ? target : 'http://' + target; b.additional_args = p; break;
+            case 'sqlmap': b.url = target.startsWith('http') ? target : 'http://' + target; b.additional_args = p; break;
+            case 'enum4linux': b.target = target; b.additional_args = p || '-a'; break;
+            case 'metasploit': b.module = target; b.options = {}; break;
+            case 'hydra': b.target = target; b.service = 'ssh'; b.additional_args = p; break;
+            case 'john': b.hash_file = target; if (wordlist) b.wordlist = wordlist; b.additional_args = p; break;
+            case 'wpscan': b.url = target.startsWith('http') ? target : 'http://' + target; b.additional_args = p; break;
+        }
+        return b;
+    }
+
+    // ---------- Theme ----------
+    function applyTheme(t) {
+        document.documentElement.setAttribute('data-theme', t);
+        document.getElementById('theme-btn').textContent = t === 'dark' ? '🌙' : '☀️';
+        try { localStorage.setItem('kmcp-theme', t); } catch(e){}
+    }
+    function toggleTheme() {
+        const cur = document.documentElement.getAttribute('data-theme');
+        applyTheme(cur === 'dark' ? 'light' : 'dark');
+    }
+    (function initTheme(){
+        let t = 'dark';
+        try { t = localStorage.getItem('kmcp-theme') || 'dark'; } catch(e){}
+        applyTheme(t);
+    })();
+
+    // ---------- Tool change UI ----------
+    function onToolChange() {
+        const tool = document.getElementById('tool').value;
+        document.getElementById('param-help').textContent = PARAM_HELP[tool] ? '— ' + PARAM_HELP[tool] : '';
+        const chips = document.getElementById('chips');
+        chips.innerHTML = (CHIPS[tool] || []).map(c =>
+            `<span class="chip" onclick="addParam('${c[0].replace(/'/g,"\\'")}')"><b>${c[0]}</b> ${c[1]}</span>`).join('');
+        // Wordlist only relevant for a few tools
+        const usesWordlist = ['gobuster','dirb','john'].includes(tool);
+        document.getElementById('wordlist-field').style.display = usesWordlist ? 'block' : 'none';
+        // Target placeholder
+        const ph = { nmap:'192.168.1.10', gobuster:'example.com', dirb:'example.com', nikto:'example.com',
+            sqlmap:'http://example.com/page?id=1', enum4linux:'192.168.1.10', metasploit:'exploit/windows/smb/ms17_010',
+            hydra:'192.168.1.10', john:'/root/hashes.txt', wpscan:'example.com' };
+        document.getElementById('target').placeholder = ph[tool] || 'Hedef';
+    }
+    function addParam(txt) {
+        const el = document.getElementById('params');
+        el.value = (el.value.trim() + ' ' + txt).trim();
+    }
+
+    // ---------- Status / console helpers ----------
+    function setStatus(msg, type='info') {
+        const s = document.getElementById('status');
+        s.textContent = msg; s.className = 'status show ' + type;
+    }
+    function hideStatus() { document.getElementById('status').className = 'status'; }
+    function consoleEl() { return document.getElementById('console'); }
+    function clearConsole() { consoleEl().innerHTML = '<span class="empty">Konsol temizlendi.</span>'; }
+    function appendLine(text, cls='') {
+        const c = consoleEl();
+        const first = c.querySelector('.empty');
+        if (first) c.innerHTML = '';
+        const line = document.createElement('span');
+        line.className = 'line ' + cls;
+        line.textContent = text;
+        c.appendChild(line);
+        c.scrollTop = c.scrollHeight;
+    }
+    function switchTab(tab) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        document.getElementById('panel-live').classList.toggle('active', tab === 'live');
+        document.getElementById('panel-findings').classList.toggle('active', tab === 'findings');
+        document.getElementById('panel-detail').classList.toggle('active', tab === 'detail');
+    }
+    function esc(t){ const d=document.createElement('div'); d.textContent=t==null?'':t; return d.innerHTML; }
+
+    // ---------- Socket.IO (resilient: page must work even if WS/lib fails) ----------
+    let currentScanId = null, scanning = false;
+    let socket = { on(){}, emit(){}, connected: false };  // no-op fallback
+    try {
+        if (typeof io !== 'undefined') {
+            socket = io(location.origin, { transports: ['websocket','polling'] });
+        } else {
+            console.warn('Socket.IO not loaded — live streaming disabled, results still shown via polling.');
+        }
+    } catch (e) { console.warn('Socket init failed:', e); }
+
+    socket.on('connect', () => console.log('WS connected'));
+    socket.on('scan_output', (d) => {
+        if (d.scan_id && d.scan_id !== currentScanId) return;
+        appendLine(d.line || '', d.type === 'stderr' || d.is_error ? 'err' : '');
+        if (d.elapsed !== undefined) {
+            const eta = d.eta || 1; const total = (d.elapsed || 0) + eta;
+            const pct = Math.min(96, ((d.elapsed || 0) / total) * 100);
+            setProgress(pct);
+        }
+    });
+    socket.on('scan_started', (d) => { appendLine('$ ' + (d.command || ''), 'sys'); });
+    socket.on('scan_completed', (d) => {
+        appendLine(`✓ Tamamlandı — ${(d.elapsed||0).toFixed(2)}s, ${d.line_count||0} satır (kod: ${d.return_code})`, 'done');
+        finishScan(true);
+    });
+    socket.on('scan_timeout', (d) => { appendLine(`⚠ Zaman aşımı — ${(d.elapsed||0).toFixed(2)}s`, 'err'); finishScan(false, 'timeout'); });
+    socket.on('scan_cancelled', () => { appendLine('✕ Kullanıcı tarafından iptal edildi', 'err'); finishScan(false, 'cancelled'); });
+
+    function setProgress(pct){ const p=document.getElementById('progress'); p.classList.add('show'); document.getElementById('progress-fill').style.width = pct + '%'; }
+
+    // ---------- Run / cancel ----------
+    function runScan() {
+        const target = document.getElementById('target').value.trim();
+        const tool = document.getElementById('tool').value;
+        const params = document.getElementById('params').value.trim();
+        const wordlist = document.getElementById('wordlist').value.trim();
+        if (!target) { setStatus('Lütfen bir hedef girin', 'error'); return; }
+
+        scanning = true;
+        currentScanId = 'scan_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+        socket.emit('join_scan', { scan_id: currentScanId });
+
+        document.getElementById('run-btn').disabled = true;
+        document.getElementById('run-label').innerHTML = '<span class="spinner"></span> Taranıyor…';
+        document.getElementById('cancel-btn').style.display = 'flex';
+        document.getElementById('s-active').textContent = tool;
+        setStatus('Tarama başlatıldı…', 'info');
+        setProgress(3);
+        switchTab('live');
+        consoleEl().innerHTML = '';
+        appendLine('Tarama hazırlanıyor: ' + tool + ' → ' + target, 'sys');
+
+        const body = buildBody(tool, target, params, wordlist, currentScanId);
+        fetch(`${API}/api/tools/${tool}`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { setStatus('Hata: ' + data.error, 'error'); appendLine('✕ ' + data.error, 'err'); finishScan(false); return; }
+            const ok = data.success !== false || data.return_code === 0;
+            setStatus(ok ? 'Tarama tamamlandı' : ('Tamamlandı (kod: ' + data.return_code + ')'), ok ? 'ok' : 'error');
+            // In case websocket completion event didn't fire (e.g. very fast scan)
+            finishScan(ok);
+            loadHistory();
+        })
+        .catch(err => { setStatus('Hata: ' + err.message, 'error'); appendLine('✕ ' + err.message, 'err'); finishScan(false); });
+    }
+
+    function finishScan(ok, reason) {
+        if (!scanning) return;  // guard against double finalize (WS event + fetch resolve)
+        scanning = false;
+        currentScanId = null;
+        const cbtn = document.getElementById('cancel-btn');
+        document.getElementById('run-btn').disabled = false;
+        document.getElementById('run-label').textContent = '▶ Taramayı Başlat';
+        cbtn.style.display = 'none';
+        cbtn.disabled = false;
+        document.getElementById('s-active').textContent = '—';
+        setProgress(100);
+        setTimeout(() => { document.getElementById('progress').classList.remove('show'); document.getElementById('progress-fill').style.width='0%'; }, 900);
+        loadHistory();
+    }
+
+    function cancelScan() {
+        if (!currentScanId) return;
+        document.getElementById('cancel-btn').disabled = true;
+        // REST is the reliable single path (also works if WebSocket is down)
+        fetch(`${API}/api/scans/cancel/${currentScanId}`, { method: 'POST' })
+            .then(r => r.json())
+            .then(d => { if (d && d.error) appendLine('✕ İptal: ' + d.error, 'err'); })
+            .catch(() => { if (typeof socket.emit === 'function') socket.emit('cancel_scan', { scan_id: currentScanId }); });
+        setStatus('İptal isteği gönderildi…', 'info');
+    }
+
+    // ---------- History ----------
+    let activeHist = null;
+    function loadHistory() {
+        fetch(`${API}/api/history?limit=30`).then(r => r.json()).then(data => {
+            document.getElementById('s-total').textContent = data.total_count || 0;
+            const hist = data.history || [];
+            if (data.stats && data.stats.total > 0) {
+                document.getElementById('s-rate').innerHTML = Math.round((data.stats.successful / data.stats.total) * 100) + '<small>%</small>';
+            } else {
+                document.getElementById('s-rate').innerHTML = '0<small>%</small>';
+            }
+            const box = document.getElementById('history');
+            if (!hist.length) { box.innerHTML = '<div class="empty-state">Henüz tarama yok</div>'; return; }
+            box.innerHTML = hist.map(c => {
+                const tool = (c.command || '').trim().split(/\s+/)[0];
+                const cls = c.success ? 'ok' : 'err';
+                const t = new Date(c.timestamp).toLocaleString('tr-TR');
+                return `<div class="hist ${cls} ${c.id===activeHist?'active':''}" onclick="showDetail('${c.id}')">
+                    <div class="top"><span class="tool">${esc(tool)}</span><span class="badge ${cls}">${c.success?'OK':'FAIL'}</span></div>
+                    <div class="cmd">${esc(c.command)}</div>
+                    <div class="meta">${(c.duration||0).toFixed(2)}s • ${t}</div>
+                </div>`;
+            }).join('');
+        }).catch(e => console.log('history err', e));
+    }
+
+    const SEV_LABEL = { high: 'YÜKSEK', medium: 'ORTA', low: 'DÜŞÜK', info: 'BİLGİ' };
+    function renderFindings(f) {
+        const box = document.getElementById('findings');
+        if (!f || f.supported === false) {
+            box.innerHTML = `<div class="empty-state">Bu araç (${esc(f && f.tool || '')}) için otomatik ayrıştırma henüz yok.<br>Ham çıktıyı "📊 Ham Detay" sekmesinden görebilirsin.</div>`;
+            return;
+        }
+        const s = f.summary || {};
+        let html = `<div class="f-kpis">
+            <div class="f-kpi"><div class="n">${s.open_ports||0}</div><div class="l">Açık Port</div></div>
+            <div class="f-kpi"><div class="n" style="color:var(--err)">${s.high||0}</div><div class="l">Yüksek</div></div>
+            <div class="f-kpi"><div class="n" style="color:var(--warn)">${s.medium||0}</div><div class="l">Orta</div></div>
+            <div class="f-kpi"><div class="n" style="color:var(--ok)">${(s.low||0)+(s.info||0)}</div><div class="l">Düşük/Bilgi</div></div>
+        </div>`;
+
+        if (f.ports && f.ports.length) {
+            html += `<div class="f-title">📡 Açık Portlar & Servisler</div>
+                <table class="ports-table"><tr><th>Port</th><th>Servis</th><th>Sürüm</th><th>Risk</th></tr>`;
+            for (const p of f.ports) {
+                html += `<tr>
+                    <td class="p">${esc(p.port)}/${esc(p.proto)}</td>
+                    <td>${esc(p.service||'')}</td>
+                    <td class="vmono">${esc(p.version||'-')}</td>
+                    <td><span class="sev ${p.risk}">${SEV_LABEL[p.risk]||p.risk}</span></td>
+                </tr>`;
+            }
+            html += `</table>`;
+        }
+
+        if (f.findings && f.findings.length) {
+            const order = { high:0, medium:1, low:2, info:3 };
+            const sorted = [...f.findings].sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9));
+            html += `<div class="f-title">⚠️ Öne Çıkan Bulgular</div>`;
+            for (const it of sorted) {
+                html += `<div class="finding ${it.severity}">
+                    <div class="fdot"></div>
+                    <div><div class="ft">${esc(it.title)}</div>${it.detail?`<div class="fd">${esc(it.detail)}</div>`:''}</div>
+                    <span class="sev ${it.severity} fright">${SEV_LABEL[it.severity]||it.severity}</span>
+                </div>`;
+            }
+        }
+        if ((!f.ports || !f.ports.length) && (!f.findings || !f.findings.length)) {
+            html += `<div class="empty-state">Bu taramada öne çıkan bir bulgu tespit edilmedi.</div>`;
+        }
+        box.innerHTML = html;
+    }
+
+    function showDetail(id) {
+        activeHist = id;
+        loadHistory();
+        // Load parsed findings and show that tab by default when useful
+        fetch(`${API}/api/history/${id}/findings`).then(r => r.json()).then(f => {
+            renderFindings(f);
+            switchTab(f && f.supported !== false ? 'findings' : 'detail');
+        }).catch(() => switchTab('detail'));
+        fetch(`${API}/api/history/${id}`).then(r => r.json()).then(data => {
+            const c = data.command; if (!c) return;
+            const cls = c.success ? 'ok' : 'err';
+            let html = `
+                <div style="margin-bottom:14px">
+                    <button class="btn-sm primary" style="width:100%" onclick="downloadReport('${id}')">📄 Bu Taramanın PDF Raporunu İndir</button>
+                </div>
+                <div class="detail-row"><div class="k">Komut</div><div class="v mono">${esc(c.command)}</div></div>
+                <div class="detail-row"><div class="k">Hedef</div><div class="v">${esc(c.target||'—')}</div></div>
+                <div class="detail-row"><div class="k">Zaman</div><div class="v">${new Date(c.timestamp).toLocaleString('tr-TR')}</div></div>
+                <div class="detail-row"><div class="k">Süre</div><div class="v">${(c.duration||0).toFixed(3)} s</div></div>
+                <div class="detail-row"><div class="k">Durum</div><div class="v"><span class="badge ${cls}">${c.success?'Başarılı':'Başarısız'}</span> &nbsp; kod: ${c.return_code}${c.timed_out?' • zaman aşımı':''}</div></div>`;
+            if (c.stdout) html += `<div class="detail-row"><div class="k">Çıktı (stdout)</div><div class="console-detail">${esc(c.stdout.slice(0,8000))}</div></div>`;
+            if (c.stderr) html += `<div class="detail-row"><div class="k">Hata (stderr)</div><div class="console-detail" style="color:#fca5a5">${esc(c.stderr.slice(0,4000))}</div></div>`;
+            document.getElementById('detail').innerHTML = html;
+        }).catch(e => console.log('detail err', e));
+    }
+
+    // ---------- PDF reports ----------
+    function downloadReport(id) { window.open(`${API}/api/history/${id}/report`, '_blank'); }
+    function downloadSummary() {
+        // Guard: no scans -> friendly message instead of a 404 download
+        fetch(`${API}/api/history?limit=1`).then(r => r.json()).then(d => {
+            if (!d.total_count) { setStatus('Özet için henüz tarama yok', 'error'); return; }
+            window.open(`${API}/api/report/summary`, '_blank');
+        }).catch(() => window.open(`${API}/api/report/summary`, '_blank'));
+    }
+
+    // ---------- Health + tools ----------
+    function loadHealth() {
+        fetch(`${API}/api/tools/available`).then(r => r.json()).then(data => {
+            const h = document.getElementById('health');
+            const avail = data.available_tools || 0, total = data.total_tools || 10;
+            h.className = 'health up'; document.getElementById('health-text').textContent = `Çevrimiçi • ${avail}/${total} araç`;
+            document.getElementById('s-tools').innerHTML = avail + '<small> / ' + total + '</small>';
+            const all = data.all_tools || {};
+            const grid = document.getElementById('tools-grid');
+            grid.innerHTML = Object.entries(all).map(([cmd, info]) => {
+                const on = info.available ? 'on' : 'off';
+                return `<div class="tool-pill ${on}"><span class="st"></span><div><div class="nm">${esc(info.name)}</div><div class="ds">${info.available?'kullanılabilir':'bulunamadı'}</div></div></div>`;
+            }).join('');
+            document.getElementById('tools-updated').textContent = 'Güncellendi: ' + new Date().toLocaleTimeString('tr-TR');
+        }).catch(() => {
+            const h = document.getElementById('health'); h.className = 'health down';
+            document.getElementById('health-text').textContent = 'Sunucuya ulaşılamıyor';
+        });
+    }
+
+    // ---------- Templates ----------
+    const TOOL_LABEL = { nmap:'Nmap', gobuster:'Gobuster', dirb:'Dirb', nikto:'Nikto', sqlmap:'SQLmap',
+        enum4linux:'Enum4linux', metasploit:'Metasploit', hydra:'Hydra', john:'John', wpscan:'WPScan' };
+
+    function loadTemplates() {
+        fetch(`${API}/api/templates`).then(r => r.json()).then(data => {
+            const box = document.getElementById('templates');
+            const list = data.templates || [];
+            if (!list.length) { box.innerHTML = '<div class="empty-state">Şablon yok</div>'; return; }
+            box.innerHTML = list.map(t => {
+                const del = t.builtin ? '' : `<button class="tdel" title="Sil" onclick="deleteTemplate('${t.id}', event)">✕</button>`;
+                const badge = t.builtin ? '<span class="tbadge">★ hazır</span>' : '<span class="tbadge">kişisel</span>';
+                const paramLine = [t.params, t.wordlist].filter(Boolean).join('  ') || '(parametresiz)';
+                return `<div class="tpl">
+                    ${del}
+                    <div class="thead"><span class="tname">${esc(t.name)}</span><span class="ttool">${esc(t.tool)}</span></div>
+                    <div class="tdesc">${esc(t.description || '')}</div>
+                    <div class="tparams" title="${esc(paramLine)}">${esc(paramLine)}</div>
+                    ${badge}
+                    <div class="tactions">
+                        <button class="tbtn" onclick='applyTemplate(${JSON.stringify(t)})'>Yükle</button>
+                        <button class="tbtn run" onclick='runTemplate(${JSON.stringify(t)})'>▶ Çalıştır</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }).catch(e => console.log('templates err', e));
+    }
+
+    function applyTemplate(t, silent) {
+        document.getElementById('tool').value = t.tool;
+        onToolChange();
+        if (t.target) document.getElementById('target').value = t.target;
+        document.getElementById('params').value = t.params || '';
+        if (t.wordlist) document.getElementById('wordlist').value = t.wordlist;
+        if (!silent) setStatus('Şablon yüklendi: ' + t.name + (t.target ? '' : ' — hedef girin'), 'info');
+        document.getElementById('target').focus();
+    }
+
+    function runTemplate(t) {
+        applyTemplate(t, true);
+        if (!document.getElementById('target').value.trim()) {
+            setStatus('Bu şablonun hedefi yok — lütfen bir hedef girin', 'error');
+            document.getElementById('target').focus();
+            return;
+        }
+        runScan();
+    }
+
+    function deleteTemplate(id, ev) {
+        if (ev) ev.stopPropagation();
+        if (!confirm('Bu şablon silinsin mi?')) return;
+        fetch(`${API}/api/templates/${id}`, { method: 'DELETE' })
+            .then(r => r.json())
+            .then(d => { if (d.error) alert(d.error); loadTemplates(); })
+            .catch(e => console.log('delete tpl err', e));
+    }
+
+    function openSaveTemplate() {
+        const tool = document.getElementById('tool').value;
+        const params = document.getElementById('params').value.trim();
+        const wordlist = document.getElementById('wordlist').value.trim();
+        document.getElementById('tpl-name').value = '';
+        document.getElementById('tpl-desc').value = '';
+        document.getElementById('tpl-preview').textContent =
+            `Araç: ${TOOL_LABEL[tool] || tool}  •  Parametre: ${params || '(yok)'}${wordlist ? '  •  Wordlist: ' + wordlist : ''}`;
+        document.getElementById('tpl-modal').classList.add('show');
+        setTimeout(() => document.getElementById('tpl-name').focus(), 50);
+    }
+    function closeSaveTemplate() { document.getElementById('tpl-modal').classList.remove('show'); }
+
+    function saveTemplate() {
+        const name = document.getElementById('tpl-name').value.trim();
+        if (!name) { document.getElementById('tpl-name').focus(); return; }
+        const body = {
+            name: name,
+            description: document.getElementById('tpl-desc').value.trim(),
+            tool: document.getElementById('tool').value,
+            target: document.getElementById('target').value.trim(),
+            params: document.getElementById('params').value.trim(),
+            wordlist: document.getElementById('wordlist').value.trim()
+        };
+        fetch(`${API}/api/templates`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) })
+            .then(r => r.json())
+            .then(d => {
+                if (d.error) { alert(d.error); return; }
+                closeSaveTemplate(); loadTemplates(); setStatus('Şablon kaydedildi: ' + name, 'ok');
+            })
+            .catch(e => { alert('Kaydetme hatası: ' + e.message); });
+    }
+
+    // ---------- Init ----------
+    onToolChange();
+    loadHistory();
+    loadHealth();
+    loadTemplates();
+    setInterval(loadHistory, 5000);
+    setInterval(loadHealth, 30000);
+    </script>
+</body>
+</html>
