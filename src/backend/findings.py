@@ -25,6 +25,7 @@ import re
 from typing import Dict, Any, List
 
 SEVERITIES = ("high", "medium", "low", "info")
+_SEV_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3}
 
 # Services that are risky to expose directly to a network
 HIGH_RISK_SERVICES = {
@@ -138,6 +139,9 @@ def parse_nmap(stdout: str, command: str = "") -> Dict[str, Any]:
                     "title": f"{label}: {p['version']}",
                     "detail": msg, "severity": sev,
                 })
+                # keep the ports table consistent with the highlighted finding
+                if _SEV_RANK.get(sev, 0) > _SEV_RANK.get(p["risk"], 0):
+                    p["risk"] = sev
                 break
 
     # Medium services that weren't already flagged as high
