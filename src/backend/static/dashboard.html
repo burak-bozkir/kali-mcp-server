@@ -162,6 +162,9 @@
         .progress { margin-top: 14px; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; display: none; border: 1px solid var(--border); }
         .progress.show { display: block; }
         .progress .fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s ease; }
+        /* unknown progress (most tools don't report a %) — a moving stripe instead of a fake number */
+        .progress.indet .fill { width: 30% !important; transition: none; animation: indet 1.6s ease-in-out infinite; }
+        @keyframes indet { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
 
         /* Tabs */
         .tabs { display: flex; gap: 6px; }
@@ -290,6 +293,36 @@
         .finding .fd { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; word-break: break-word; }
         .finding .fright { margin-left: auto; }
 
+        /* Recon workflow */
+        .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+        .checks label { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; color: var(--text); margin: 0; cursor: pointer; }
+        .checks input[type=checkbox] { width: auto; accent-color: var(--accent); }
+        .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .row2 label { font-size: 11px; }
+        .wf-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+        .wf-head .wt { font-weight: 700; font-size: 15px; font-family: var(--mono); }
+        .wf-head .wm { font-size: 11.5px; color: var(--text-faint); }
+        .wf-head .sp { flex: 1; }
+        .wst { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; text-transform: uppercase; letter-spacing: .02em; }
+        .wst.pending, .wst.skipped { background: var(--surface-2); color: var(--text-faint); border: 1px solid var(--border); }
+        .wst.running { background: rgba(34,211,238,.14); color: var(--accent); }
+        .wst.done, .wst.completed { background: rgba(34,197,94,.14); color: var(--ok); }
+        .wst.failed { background: rgba(239,68,68,.15); color: var(--err); }
+        .wst.cancelled { background: rgba(245,158,11,.15); color: var(--warn); }
+        .web-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+        .web-chips .chip { cursor: default; }
+        .steps { display: flex; flex-direction: column; gap: 7px; }
+        .step { display: grid; grid-template-columns: 26px 78px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+        .step.click { cursor: pointer; } .step.click:hover { border-color: var(--border-strong); }
+        .step.running { border-color: var(--accent); }
+        .step .si { font-family: var(--mono); font-size: 11px; color: var(--text-faint); text-align: center; }
+        .step .stool { font-weight: 700; font-size: 12.5px; text-transform: capitalize; }
+        .step .starget { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .step .snote { font-size: 11px; color: var(--text-faint); grid-column: 2 / -1; margin-top: -4px; }
+        .step .sright { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+        .finding .ftool { font-family: var(--mono); font-size: 10px; color: var(--text-faint); margin-left: 6px; font-weight: 500; }
+        .wf-list .hist .cmd { white-space: normal; }
+
         @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2,1fr); } }
         @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } .wrap { padding: 14px; } .f-kpis { grid-template-columns: repeat(2,1fr); } }
     </style>
@@ -352,12 +385,30 @@
                             <option value="hydra">Hydra — Brute Force</option>
                             <option value="john">John — Parola Kırma</option>
                             <option value="wpscan">WPScan — WordPress</option>
+                            <option disabled>──────────</option>
+                            <option value="recon">🔗 Zincirleme Recon — nmap → gobuster/nikto</option>
                         </select>
+                    </div>
+                    <div class="field" id="recon-field" style="display:none">
+                        <label>Web portlarında çalışacak araçlar</label>
+                        <div class="checks">
+                            <label><input type="checkbox" id="rc-gobuster" checked> Gobuster (dizin keşfi)</label>
+                            <label><input type="checkbox" id="rc-nikto" checked> Nikto (web zafiyet)</label>
+                        </div>
+                        <div class="row2">
+                            <div><label>Maks. web hedefi</label><input type="number" id="rc-max" min="1" max="20" value="5"></div>
+                            <div><label>Adım zaman aşımı (sn)</label><input type="number" id="rc-timeout" min="10" max="14400" placeholder="Boş = araç varsayılanı"></div>
+                        </div>
+                        <div class="hint">Önce nmap -sV çalışır; bulunan her http/https portuna seçilen araçlar otomatik uygulanır. Hedef tek bir host olmalı (CIDR/URL değil).</div>
                     </div>
                     <div class="field">
                         <label>Ek Parametreler <span id="param-help" style="color:var(--text-faint);font-weight:400"></span></label>
                         <textarea id="params" rows="2" placeholder="Opsiyonel"></textarea>
                         <div class="param-chips" id="chips"></div>
+                    </div>
+                    <div class="field" id="timeout-field">
+                        <label>Zaman aşımı (sn) <span id="timeout-help" style="color:var(--text-faint);font-weight:400"></span></label>
+                        <input type="number" id="timeout" min="10" max="14400" placeholder="Boş = araç varsayılanı">
                     </div>
                     <div class="field" id="wordlist-field">
                         <label>Özel Wordlist (opsiyonel)</label>
@@ -378,6 +429,7 @@
                         <div class="tab active" data-tab="live" onclick="switchTab('live')">🔴 Canlı Çıktı</div>
                         <div class="tab" data-tab="findings" onclick="switchTab('findings')">🎯 Bulgular</div>
                         <div class="tab" data-tab="detail" onclick="switchTab('detail')">📊 Ham Detay</div>
+                        <div class="tab" data-tab="recon" onclick="switchTab('recon')">🔗 Recon Akışı</div>
                     </div>
                     <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Konsolu temizle" onclick="clearConsole()">🗑️</button>
                 </div>
@@ -390,6 +442,11 @@
                     </div>
                     <div class="tab-panel" id="panel-detail">
                         <div id="detail"><div class="empty-state">Detayları görmek için geçmişten bir tarama seçin.</div></div>
+                    </div>
+                    <div class="tab-panel" id="panel-recon">
+                        <div id="recon-view"><div class="empty-state">Araç listesinden "🔗 Zincirleme Recon" seçip başlatın veya aşağıdan geçmiş bir akışı açın.</div></div>
+                        <div class="f-title" style="margin-top:20px">🕘 Son Recon Akışları</div>
+                        <div class="list wf-list" id="recon-list" style="max-height:260px"><div class="empty-state">Henüz akış yok</div></div>
                     </div>
                 </div>
             </div>
@@ -452,7 +509,8 @@
         metasploit: 'LHOST=... LPORT=...',
         hydra: '-t 4 -f  (service: ssh)',
         john: '--format=raw-md5',
-        wpscan: '--enumerate vp'
+        wpscan: '--enumerate vp',
+        recon: 'nmap ek parametreleri (varsayılan: -T4 -Pn)'
     };
     const CHIPS = {
         nmap: [['-sV','sürüm'],['-sC','script'],['-A','agresif'],['-p 1-1000','port'],['-O','OS'],['-T4','hız']],
@@ -464,7 +522,8 @@
         metasploit: [['LHOST=','listener IP'],['LPORT=4444','port']],
         hydra: [['-t 4','görev'],['-f','ilkte dur']],
         john: [['--format=raw-md5','format'],['--rules','kurallar']],
-        wpscan: [['--enumerate vp','pluginler'],['--random-user-agent','UA']]
+        wpscan: [['--enumerate vp','pluginler'],['--random-user-agent','UA']],
+        recon: [['-T4','hız'],['-Pn','ping yok'],['--top-ports 1000','top port'],['--open','sadece açık']]
     };
     // Which tools use the target as a URL vs raw target
     function buildBody(tool, target, params, wordlist, scanId) {
@@ -513,13 +572,24 @@
         chips.innerHTML = (CHIPS[tool] || []).map(c =>
             `<span class="chip" onclick="addParam('${c[0].replace(/'/g,"\\'")}')"><b>${c[0]}</b> ${c[1]}</span>`).join('');
         // Wordlist only relevant for a few tools
-        const usesWordlist = ['gobuster','dirb','john'].includes(tool);
+        const usesWordlist = ['gobuster','dirb','john','recon'].includes(tool);
         document.getElementById('wordlist-field').style.display = usesWordlist ? 'block' : 'none';
+        document.getElementById('recon-field').style.display = tool === 'recon' ? 'block' : 'none';
+        document.getElementById('timeout-field').style.display = tool === 'recon' ? 'none' : 'block';
+        updateTimeoutHelp();
+        document.getElementById('params').placeholder = tool === 'recon' ? '-T4 -Pn' : 'Opsiyonel';
         // Target placeholder
         const ph = { nmap:'192.168.1.10', gobuster:'example.com', dirb:'example.com', nikto:'example.com',
             sqlmap:'http://example.com/page?id=1', enum4linux:'192.168.1.10', metasploit:'exploit/windows/smb/ms17_010',
-            hydra:'192.168.1.10', john:'/root/hashes.txt', wpscan:'example.com' };
+            hydra:'192.168.1.10', john:'/root/hashes.txt', wpscan:'example.com', recon:'192.168.1.10 (tek host)' };
         document.getElementById('target').placeholder = ph[tool] || 'Hedef';
+    }
+    // Per-tool default timeouts come from /api/tools/available
+    let TOOL_TIMEOUTS = {};
+    function updateTimeoutHelp() {
+        const tool = document.getElementById('tool').value;
+        const t = TOOL_TIMEOUTS[tool] || TOOL_TIMEOUTS['default'];
+        document.getElementById('timeout-help').textContent = t ? `— varsayılan ${Math.round(t / 60)} dk` : '';
     }
     function addParam(txt) {
         const el = document.getElementById('params');
@@ -549,47 +619,102 @@
         document.getElementById('panel-live').classList.toggle('active', tab === 'live');
         document.getElementById('panel-findings').classList.toggle('active', tab === 'findings');
         document.getElementById('panel-detail').classList.toggle('active', tab === 'detail');
+        document.getElementById('panel-recon').classList.toggle('active', tab === 'recon');
+        if (tab === 'recon') loadWorkflows();
     }
     function esc(t){ const d=document.createElement('div'); d.textContent=t==null?'':t; return d.innerHTML; }
 
-    // ---------- Socket.IO (resilient: page must work even if WS/lib fails) ----------
+    // ---------- Live output: server-buffered, pulled by offset ----------
+    // Every scan's output is buffered on the server. The console pulls it with
+    // GET /api/scans/<id>?since=N, so nothing is lost if a WebSocket event is
+    // missed, the socket never connects, or the page is reloaded. WebSocket
+    // events are only a "new data, pull now" nudge for low latency.
     let currentScanId = null, scanning = false;
+    let currentWorkflowId = null;   // set while a chained recon workflow runs
+    let follow = null;              // { id, since, cmdShown } — scan the console is streaming
+    let followTimer = null, ticking = false, nudgeTimer = null;
+    const SCAN_DONE = ['completed', 'failed', 'timeout', 'cancelled'];
+
     let socket = { on(){}, emit(){}, connected: false };  // no-op fallback
     try {
         if (typeof io !== 'undefined') {
-            socket = io(location.origin, { transports: ['websocket','polling'] });
+            // default transports = long-polling first, then upgrade to websocket.
+            // (websocket-only has no fallback in socket.io-client 4.7 if WS is blocked)
+            socket = io(location.origin);
         } else {
-            console.warn('Socket.IO not loaded — live streaming disabled, results still shown via polling.');
+            console.warn('Socket.IO not loaded — output is still shown via polling.');
         }
     } catch (e) { console.warn('Socket init failed:', e); }
 
-    socket.on('connect', () => console.log('WS connected'));
-    socket.on('scan_output', (d) => {
-        if (d.scan_id && d.scan_id !== currentScanId) return;
-        appendLine(d.line || '', d.type === 'stderr' || d.is_error ? 'err' : '');
-        if (d.elapsed !== undefined) {
-            const eta = d.eta || 1; const total = (d.elapsed || 0) + eta;
-            const pct = Math.min(96, ((d.elapsed || 0) / total) * 100);
-            setProgress(pct);
+    socket.on('connect', () => {
+        console.log('WS connected');
+        // re-join rooms after a reconnect
+        if (currentWorkflowId) socket.emit('join_scan', { scan_id: currentWorkflowId });
+        else if (currentScanId) socket.emit('join_scan', { scan_id: currentScanId });
+    });
+    function nudge() {
+        if (nudgeTimer) return;
+        nudgeTimer = setTimeout(() => {
+            nudgeTimer = null;
+            if (currentWorkflowId) pollWorkflow(); else tickScan();
+        }, 250);
+    }
+    ['scan_output', 'scan_started', 'scan_progress', 'scan_completed', 'scan_timeout',
+     'scan_cancelled', 'workflow_step_started', 'workflow_update', 'workflow_finished']
+        .forEach(ev => socket.on(ev, nudge));
+
+    function setProgress(pct){
+        const p = document.getElementById('progress'); p.classList.add('show'); p.classList.remove('indet');
+        document.getElementById('progress-fill').style.width = pct + '%';
+    }
+    function setIndeterminate(){
+        const p = document.getElementById('progress'); p.classList.add('show', 'indet');
+    }
+    function fmtDur(sec) {
+        sec = Math.max(0, Math.round(sec || 0));
+        const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+        return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+    }
+
+    // Pull new output lines of one scan into the console.
+    // Returns the snapshot, null if the scan is unknown (404), undefined on network error.
+    async function pullLines(f) {
+        let r;
+        try { r = await fetch(`${API}/api/scans/${encodeURIComponent(f.id)}?since=${f.since}`); }
+        catch (e) { return undefined; }
+        if (r.status === 404) return null;
+        if (!r.ok) return undefined;
+        const s = await r.json();
+        if (!f.cmdShown && s.command) { appendLine('$ ' + s.command, 'sys'); f.cmdShown = true; }
+        if (s.skipped) appendLine(`… ${s.skipped} eski satır gösterilmiyor (tampon sınırı)`, 'sys');
+        for (const l of (s.lines || [])) appendLine(l.line, l.type === 'stderr' ? 'err' : '');
+        f.since = s.next;
+        return s;
+    }
+    const scanFinished = s => s === null || (s && SCAN_DONE.includes(s.status) && !s.more);
+
+    function showScanProgress(s, prefix) {
+        const el = s.elapsed || 0, to = s.timeout || 0;
+        const tail = `${fmtDur(el)} / ${fmtDur(to)} (zaman aşımı)`;
+        if (s.progress && s.progress.percent != null) {
+            const p = s.progress;
+            setProgress(Math.max(2, Math.min(99, p.percent)));
+            setStatus(`${prefix} %${p.percent.toFixed(1)} • ${p.done}/${p.total} istek • ${tail}`, 'info');
+        } else {
+            setIndeterminate();   // most tools don't report a % — don't fake one
+            setStatus(`${prefix} ${tail}`, 'info');
         }
-    });
-    socket.on('scan_started', (d) => { appendLine('$ ' + (d.command || ''), 'sys'); });
-    socket.on('scan_completed', (d) => {
-        appendLine(`✓ Tamamlandı — ${(d.elapsed||0).toFixed(2)}s, ${d.line_count||0} satır (kod: ${d.return_code})`, 'done');
-        finishScan(true);
-    });
-    socket.on('scan_timeout', (d) => { appendLine(`⚠ Zaman aşımı — ${(d.elapsed||0).toFixed(2)}s`, 'err'); finishScan(false, 'timeout'); });
-    socket.on('scan_cancelled', () => { appendLine('✕ Kullanıcı tarafından iptal edildi', 'err'); finishScan(false, 'cancelled'); });
+    }
 
-    function setProgress(pct){ const p=document.getElementById('progress'); p.classList.add('show'); document.getElementById('progress-fill').style.width = pct + '%'; }
-
-    // ---------- Run / cancel ----------
+    // ---------- Single scan ----------
     function runScan() {
         const target = document.getElementById('target').value.trim();
         const tool = document.getElementById('tool').value;
         const params = document.getElementById('params').value.trim();
         const wordlist = document.getElementById('wordlist').value.trim();
+        const timeout = document.getElementById('timeout').value.trim();
         if (!target) { setStatus('Lütfen bir hedef girin', 'error'); return; }
+        if (tool === 'recon') { runRecon(target, params, wordlist); return; }
 
         scanning = true;
         currentScanId = 'scan_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
@@ -600,31 +725,72 @@
         document.getElementById('cancel-btn').style.display = 'flex';
         document.getElementById('s-active').textContent = tool;
         setStatus('Tarama başlatıldı…', 'info');
-        setProgress(3);
+        setIndeterminate();
         switchTab('live');
         consoleEl().innerHTML = '';
         appendLine('Tarama hazırlanıyor: ' + tool + ' → ' + target, 'sys');
 
         const body = buildBody(tool, target, params, wordlist, currentScanId);
+        body.async = true;                    // returns 202 at once; we pull the output
+        if (timeout) body.timeout = parseInt(timeout, 10);
         fetch(`${API}/api/tools/${tool}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
         })
         .then(r => r.json())
         .then(data => {
             if (data.error) { setStatus('Hata: ' + data.error, 'error'); appendLine('✕ ' + data.error, 'err'); finishScan(false); return; }
-            const ok = data.success !== false || data.return_code === 0;
-            setStatus(ok ? 'Tarama tamamlandı' : ('Tamamlandı (kod: ' + data.return_code + ')'), ok ? 'ok' : 'error');
-            // In case websocket completion event didn't fire (e.g. very fast scan)
-            finishScan(ok);
-            loadHistory();
+            followScan(data.scan_id || currentScanId);
         })
         .catch(err => { setStatus('Hata: ' + err.message, 'error'); appendLine('✕ ' + err.message, 'err'); finishScan(false); });
     }
 
+    function followScan(id) {
+        currentScanId = id;
+        follow = { id, since: 0, cmdShown: false };
+        clearInterval(followTimer);
+        followTimer = setInterval(tickScan, 1000);
+        tickScan();
+    }
+
+    async function tickScan() {
+        if (!follow || ticking || currentWorkflowId) return;
+        ticking = true;
+        try {
+            const f = follow;
+            const s = await pullLines(f);
+            if (f !== follow) return;
+            if (s === undefined) return;                 // network hiccup: retry next tick
+            if (s && !scanFinished(s)) { showScanProgress(s, 'Taranıyor…'); return; }
+            if (s && s.more) return;
+            finishFollow(s);
+        } finally { ticking = false; }
+    }
+
+    function finishFollow(s) {
+        clearInterval(followTimer); followTimer = null; follow = null;
+        if (!s) { appendLine('✕ Tarama kaydı sunucuda bulunamadı', 'err'); setStatus('Tarama durumu alınamadı', 'error'); finishScan(false); return; }
+        const dur = fmtDur(s.elapsed);
+        if (s.status === 'completed') {
+            appendLine(`✓ Tamamlandı — ${dur} (kod: ${s.return_code})`, 'done');
+            setStatus(`Tarama tamamlandı — ${dur}`, 'ok');
+        } else if (s.status === 'timeout') {
+            appendLine(`⚠ Zaman aşımı (${fmtDur(s.timeout)}) — o ana kadarki çıktı geçmişe kaydedildi`, 'err');
+            setStatus(`Zaman aşımı: ${fmtDur(s.timeout)} doldu, kısmi sonuç kaydedildi. Daha uzun süre için "Zaman aşımı" alanını artırın.`, 'error');
+        } else if (s.status === 'cancelled') {
+            appendLine('✕ Kullanıcı tarafından iptal edildi', 'err');
+            setStatus('Tarama iptal edildi', 'error');
+        } else {
+            appendLine(`✕ Başarısız — çıkış kodu ${s.return_code}`, 'err');
+            setStatus(`Tarama başarısız (kod: ${s.return_code})`, 'error');
+        }
+        finishScan(s.status === 'completed' || s.status === 'timeout');
+    }
+
     function finishScan(ok, reason) {
-        if (!scanning) return;  // guard against double finalize (WS event + fetch resolve)
+        if (!scanning) return;  // guard against double finalize
         scanning = false;
         currentScanId = null;
+        clearInterval(followTimer); followTimer = null; follow = null;
         const cbtn = document.getElementById('cancel-btn');
         document.getElementById('run-btn').disabled = false;
         document.getElementById('run-label').textContent = '▶ Taramayı Başlat';
@@ -632,11 +798,12 @@
         cbtn.disabled = false;
         document.getElementById('s-active').textContent = '—';
         setProgress(100);
-        setTimeout(() => { document.getElementById('progress').classList.remove('show'); document.getElementById('progress-fill').style.width='0%'; }, 900);
+        setTimeout(() => { document.getElementById('progress').classList.remove('show', 'indet'); document.getElementById('progress-fill').style.width='0%'; }, 900);
         loadHistory();
     }
 
     function cancelScan() {
+        if (currentWorkflowId) { cancelRecon(); return; }
         if (!currentScanId) return;
         document.getElementById('cancel-btn').disabled = true;
         // REST is the reliable single path (also works if WebSocket is down)
@@ -645,6 +812,279 @@
             .then(d => { if (d && d.error) appendLine('✕ İptal: ' + d.error, 'err'); })
             .catch(() => { if (typeof socket.emit === 'function') socket.emit('cancel_scan', { scan_id: currentScanId }); });
         setStatus('İptal isteği gönderildi…', 'info');
+    }
+
+    // ---------- Chained recon workflow (nmap → gobuster / nikto) ----------
+    const WST_LABEL = { pending:'Bekliyor', running:'Çalışıyor', done:'Tamam', failed:'Başarısız',
+        skipped:'Atlandı', cancelled:'İptal', completed:'Tamamlandı' };
+    const TERMINAL = ['done','failed','skipped','cancelled'];
+    let wfPollTimer = null, wfPolling = false, wfCursor = 0, wfWebShown = false, wfHeaders = {}, viewedWorkflowId = null;
+
+    // UUID v4 (crypto.randomUUID only exists on https/localhost, not http://<vm-ip>)
+    function uuid4() {
+        if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+        });
+    }
+
+    function runRecon(target, params, wordlist) {
+        const wid = uuid4();
+        socket.emit('join_scan', { scan_id: wid });
+        const stepTimeout = document.getElementById('rc-timeout').value.trim();
+        const body = {
+            workflow_id: wid,
+            target: target,
+            nmap_args: params || '-T4 -Pn',
+            run_gobuster: document.getElementById('rc-gobuster').checked,
+            run_nikto: document.getElementById('rc-nikto').checked,
+            max_web_targets: parseInt(document.getElementById('rc-max').value || '5', 10)
+        };
+        if (stepTimeout) body.step_timeout = parseInt(stepTimeout, 10);   // empty = per-tool defaults
+        if (wordlist) body.wordlist = wordlist;
+        document.getElementById('run-btn').disabled = true;
+        setStatus('Recon akışı başlatılıyor…', 'info');
+        fetch(`${API}/api/workflows/recon`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        })
+        .then(r => r.json().then(d => ({ ok: r.ok, d })))
+        .then(({ ok, d }) => {
+            if (!ok || d.error) {
+                socket.emit('leave_scan', { scan_id: wid });
+                setStatus('Hata: ' + (d.error || 'bilinmeyen hata'), 'error');
+                document.getElementById('run-btn').disabled = false;
+                return;
+            }
+            attachWorkflow(d.workflow_id, d.workflow);
+        })
+        .catch(err => { setStatus('Hata: ' + err.message, 'error'); document.getElementById('run-btn').disabled = false; });
+    }
+
+    // Follow a running workflow: console + progress + Recon tab
+    function attachWorkflow(id, wf, resumed) {
+        scanning = true;
+        currentWorkflowId = id; viewedWorkflowId = id;
+        wfCursor = 0; wfWebShown = false; wfHeaders = {}; follow = null;
+        socket.emit('join_scan', { scan_id: id });
+        document.getElementById('run-btn').disabled = true;
+        document.getElementById('run-label').innerHTML = '<span class="spinner"></span> Recon çalışıyor…';
+        const cbtn = document.getElementById('cancel-btn');
+        cbtn.style.display = 'flex'; cbtn.disabled = false;
+        document.getElementById('s-active').textContent = 'recon';
+        consoleEl().innerHTML = '';
+        appendLine((resumed ? '↻ Devam eden recon akışına bağlanıldı → ' : '🔗 Zincirleme recon başladı → ') + (wf ? wf.target : id), 'sys');
+        setStatus(resumed ? 'Devam eden recon akışı izleniyor…' : 'Recon akışı başladı — önce nmap çalışıyor…', 'info');
+        setIndeterminate();
+        switchTab('live');
+        if (wf) renderWorkflow(wf);
+        clearInterval(wfPollTimer);
+        wfPollTimer = setInterval(pollWorkflow, 1500);
+        pollWorkflow();
+    }
+
+    async function pollWorkflow() {
+        if (!currentWorkflowId || wfPolling) return;
+        wfPolling = true;
+        const id = currentWorkflowId;
+        try {
+            const r = await fetch(`${API}/api/workflows/${id}`);
+            const d = await r.json();
+            const wf = d.workflow;
+            if (!wf || id !== currentWorkflowId) return;
+            if (viewedWorkflowId === id) renderWorkflow(wf);
+            const live = await streamSteps(wf);
+            if (id !== currentWorkflowId) return;
+            const steps = wf.steps || [];
+            if (live) showScanProgress(live, `Adım ${wfCursor + 1}/${steps.length} • ${steps[wfCursor].tool}:`);
+            if (wf.status !== 'running' && wfCursor >= steps.length) finishRecon(wf);
+        } catch (e) {
+            console.log('workflow poll err', e);
+        } finally { wfPolling = false; }
+    }
+
+    function stepHeader(st) {
+        if (wfHeaders[st.index]) return;
+        wfHeaders[st.index] = true;
+        appendLine(`━━ Adım ${st.index + 1}: ${st.tool} → ${st.target}`, 'sys');
+    }
+
+    // Stream the steps in order: each step's buffered output, then its result line.
+    // Returns the snapshot of the step still running (for the progress bar), if any.
+    async function streamSteps(wf) {
+        const steps = wf.steps || [];
+        while (wfCursor < steps.length) {
+            const st = steps[wfCursor];
+            if (st.status === 'pending') return null;           // not started yet
+            if (st.scan_id) {                                   // ran as a real process
+                stepHeader(st);
+                if (!follow || follow.id !== st.scan_id) follow = { id: st.scan_id, since: 0, cmdShown: false };
+                const s = await pullLines(follow);
+                if (s === undefined) return null;               // network error: retry next poll
+                if (st.status === 'running' || !scanFinished(s)) return s || null;
+            }
+            reportStep(st, wf);
+            follow = null;
+            wfCursor++;
+        }
+        return null;
+    }
+
+    function reportStep(st, wf) {
+        const n = (st.summary && st.summary.total) || 0;
+        const label = `Adım ${st.index + 1} (${st.tool})`;
+        if (st.status === 'done') appendLine(`✓ ${label} bitti — ${n} bulgu${st.note ? ' • ' + st.note : ''}`, 'done');
+        else if (st.status === 'failed') appendLine(`✕ ${label} başarısız${st.note ? ': ' + st.note : ''}`, 'err');
+        else if (st.status === 'skipped') appendLine(`↷ ${label} atlandı${st.note ? ': ' + st.note : ''}`, 'sys');
+        else appendLine(`✕ ${label} iptal edildi`, 'err');
+        if (st.tool === 'nmap' && st.status === 'done' && !wfWebShown) {
+            wfWebShown = true;
+            const web = wf.web_targets || [];
+            appendLine(web.length ? `🌐 Web hedefleri: ${web.map(w => w.url).join(', ')}` : '🌐 Web portu bulunamadı', 'sys');
+        }
+    }
+
+    function finishRecon(wf) {
+        clearInterval(wfPollTimer); wfPollTimer = null;
+        socket.emit('leave_scan', { scan_id: currentWorkflowId });
+        currentWorkflowId = null; scanning = false; follow = null;
+        const cbtn = document.getElementById('cancel-btn');
+        document.getElementById('run-btn').disabled = false;
+        document.getElementById('run-label').textContent = '▶ Taramayı Başlat';
+        cbtn.style.display = 'none'; cbtn.disabled = false;
+        document.getElementById('s-active').textContent = '—';
+        setProgress(100);
+        setTimeout(() => { document.getElementById('progress').classList.remove('show', 'indet'); document.getElementById('progress-fill').style.width='0%'; }, 900);
+        const s = wf.summary || {};
+        if (wf.status === 'completed') {
+            const msg = `Recon tamamlandı — ${s.web_targets||0} web hedefi, ${s.high||0} yüksek / ${s.medium||0} orta bulgu`;
+            setStatus(msg, 'ok'); appendLine('■ ' + msg, 'done');
+        } else if (wf.status === 'cancelled') {
+            setStatus('Recon akışı iptal edildi', 'error'); appendLine('■ Recon akışı iptal edildi', 'err');
+        } else {
+            setStatus('Recon başarısız: ' + (wf.error || wf.status), 'error'); appendLine('■ ' + (wf.error || 'Recon başarısız'), 'err');
+        }
+        loadHistory();
+        renderWorkflow(wf);
+        switchTab('recon');
+    }
+
+    function cancelRecon() {
+        if (!currentWorkflowId) return;
+        document.getElementById('cancel-btn').disabled = true;
+        fetch(`${API}/api/workflows/${currentWorkflowId}/cancel`, { method: 'POST' })
+            .then(r => r.json()).then(d => { if (d && d.error) appendLine('✕ İptal: ' + d.error, 'err'); })
+            .catch(e => appendLine('✕ İptal: ' + e.message, 'err'));
+        setStatus('Recon iptal isteği gönderildi…', 'info');
+    }
+
+    function renderWorkflow(wf) {
+        viewedWorkflowId = wf.id;
+        const s = wf.summary || {};
+        const running = wf.status === 'running' && wf.id === currentWorkflowId;
+        let html = `<div class="wf-head">
+            <span class="wt">${esc(wf.target)}</span>
+            <span class="wst ${esc(wf.status)}">${WST_LABEL[wf.status] || esc(wf.status)}</span>
+            <span class="wm">${fmtTime(wf.created_at)}</span>
+            <span class="sp"></span>
+            ${running ? `<button class="btn-sm" onclick="cancelRecon()">⊗ İptal</button>`
+                      : `<button class="btn-sm primary" onclick="downloadWorkflowReport('${wf.id}')">📄 PDF Rapor</button>`}
+        </div>
+        <div class="f-kpis">
+            <div class="f-kpi"><div class="n">${s.open_ports||0}</div><div class="l">Açık Port</div></div>
+            <div class="f-kpi"><div class="n" style="color:var(--accent)">${s.web_targets||0}</div><div class="l">Web Hedef</div></div>
+            <div class="f-kpi"><div class="n" style="color:var(--err)">${s.high||0}</div><div class="l">Yüksek</div></div>
+            <div class="f-kpi"><div class="n" style="color:var(--warn)">${s.medium||0}</div><div class="l">Orta</div></div>
+        </div>`;
+        if (wf.error) html += `<div class="status show error" style="margin:0 0 12px">${esc(wf.error)}</div>`;
+        if (wf.web_targets && wf.web_targets.length) {
+            html += `<div class="f-title">🌐 Web Hedefleri</div><div class="web-chips">` +
+                wf.web_targets.map(w => `<span class="chip"><b>${esc(w.url)}</b> ${esc(w.service||'')}</span>`).join('') + `</div>`;
+        }
+        html += `<div class="f-title">🧩 Adımlar <span class="hint" style="font-weight:400">(tıklayınca o taramanın detayı açılır)</span></div><div class="steps">`;
+        for (const st of (wf.steps || [])) {
+            const sm = st.summary || {};
+            const click = st.history_id ? ` click" onclick="showDetail('${st.history_id}')` : '';
+            html += `<div class="step ${esc(st.status)}${click}" title="${esc(st.command||'')}">
+                <span class="si">${st.index + 1}</span>
+                <span class="stool">${esc(st.tool)}</span>
+                <span class="starget">${esc(st.target)}</span>
+                <span class="sright">${st.duration ? st.duration.toFixed(1) + 's' : ''}${st.summary ? ' • ' + (sm.total||0) + ' bulgu' : ''}
+                    <span class="wst ${esc(st.status)}">${WST_LABEL[st.status] || esc(st.status)}</span></span>
+                ${st.note ? `<div class="snote">${esc(st.note)}</div>` : ''}
+            </div>`;
+        }
+        html += `</div>`;
+        const fl = wf.findings || [];
+        if (fl.length) {
+            html += `<div class="f-title">⚠️ Birleşik Bulgular${fl.length > 40 ? ' (en kritik 40)' : ''}</div>`;
+            for (const it of fl.slice(0, 40)) {
+                html += `<div class="finding ${esc(it.severity)}">
+                    <div class="fdot"></div>
+                    <div><div class="ft">${esc(it.title)}<span class="ftool">${esc(it.tool)} • ${esc(it.source)}</span></div>${it.detail ? `<div class="fd">${esc(it.detail)}</div>` : ''}</div>
+                    <span class="sev ${esc(it.severity)} fright">${SEV_LABEL[it.severity] || esc(it.severity)}</span>
+                </div>`;
+            }
+        }
+        document.getElementById('recon-view').innerHTML = html;
+    }
+
+    function loadWorkflows() {
+        fetch(`${API}/api/workflows?limit=15`).then(r => r.json()).then(d => {
+            const box = document.getElementById('recon-list');
+            const list = d.workflows || [];
+            if (!list.length) { box.innerHTML = '<div class="empty-state">Henüz akış yok</div>'; return; }
+            box.innerHTML = list.map(w => {
+                const s = w.summary || {};
+                const cls = w.status === 'completed' ? 'ok' : (w.status === 'failed' ? 'err' : '');
+                const tools = [...new Set((w.steps || []).map(x => x.tool))].join(' → ');
+                return `<div class="hist ${cls} ${w.id===viewedWorkflowId?'active':''}" onclick="openWorkflow('${w.id}')">
+                    <div class="top"><span class="tool" style="text-transform:none;font-family:var(--mono)">${esc(w.target)}</span><span class="wst ${esc(w.status)}">${WST_LABEL[w.status]||esc(w.status)}</span></div>
+                    <div class="cmd">${esc(tools)} • ${s.web_targets||0} web hedefi • ${s.high||0} yüksek / ${s.medium||0} orta</div>
+                    <div class="meta">${fmtTime(w.created_at)}</div>
+                </div>`;
+            }).join('');
+        }).catch(e => console.log('workflows err', e));
+    }
+
+    function openWorkflow(id) {
+        if (id === currentWorkflowId) viewedWorkflowId = id;
+        fetch(`${API}/api/workflows/${id}`).then(r => r.json()).then(d => {
+            if (!d.workflow) return;
+            renderWorkflow(d.workflow);
+            loadWorkflows();
+        }).catch(e => console.log('workflow err', e));
+    }
+
+    function downloadWorkflowReport(id) { window.open(`${API}/api/workflows/${id}/report`, '_blank'); }
+
+    // After a page reload, re-attach to a workflow that is still running
+    function resumeWorkflow() {
+        fetch(`${API}/api/workflows?limit=5`).then(r => r.json()).then(d => {
+            const run = (d.workflows || []).find(w => w.status === 'running');
+            if (run && !scanning) { attachWorkflow(run.id, null, true); return; }
+            return fetch(`${API}/api/scans/active`).then(r => r.json()).then(a => {
+                // skip workflow steps (their id is "<workflow-uuid>_s<n>")
+                const sc = (a.scans || []).find(x => !/^[0-9a-f-]{36}_s\d+$/.test(x.scan_id));
+                if (!sc || scanning) return;
+                scanning = true;
+                socket.emit('join_scan', { scan_id: sc.scan_id });
+                document.getElementById('run-btn').disabled = true;
+                document.getElementById('run-label').innerHTML = '<span class="spinner"></span> Taranıyor…';
+                document.getElementById('cancel-btn').style.display = 'flex';
+                document.getElementById('s-active').textContent = sc.tool || '…';
+                consoleEl().innerHTML = '';
+                appendLine(`↻ Devam eden taramaya bağlanıldı: ${sc.tool} → ${sc.target}`, 'sys');
+                switchTab('live');
+                followScan(sc.scan_id);
+            });
+        }).catch(() => {});
+    }
+
+    // Server timestamps are naive UTC ISO strings — mark them as UTC before parsing
+    function fmtTime(ts) {
+        if (!ts) return '';
+        const iso = /[zZ]|[+-]\d\d:\d\d$/.test(ts) ? ts : ts + 'Z';
+        return new Date(iso).toLocaleString('tr-TR');
     }
 
     // ---------- History ----------
@@ -663,7 +1103,7 @@
             box.innerHTML = hist.map(c => {
                 const tool = (c.command || '').trim().split(/\s+/)[0];
                 const cls = c.success ? 'ok' : 'err';
-                const t = new Date(c.timestamp).toLocaleString('tr-TR');
+                const t = fmtTime(c.timestamp);
                 return `<div class="hist ${cls} ${c.id===activeHist?'active':''}" onclick="showDetail('${c.id}')">
                     <div class="top"><span class="tool">${esc(tool)}</span><span class="badge ${cls}">${c.success?'OK':'FAIL'}</span></div>
                     <div class="cmd">${esc(c.command)}</div>
@@ -737,7 +1177,7 @@
                 </div>
                 <div class="detail-row"><div class="k">Komut</div><div class="v mono">${esc(c.command)}</div></div>
                 <div class="detail-row"><div class="k">Hedef</div><div class="v">${esc(c.target||'—')}</div></div>
-                <div class="detail-row"><div class="k">Zaman</div><div class="v">${new Date(c.timestamp).toLocaleString('tr-TR')}</div></div>
+                <div class="detail-row"><div class="k">Zaman</div><div class="v">${fmtTime(c.timestamp)}</div></div>
                 <div class="detail-row"><div class="k">Süre</div><div class="v">${(c.duration||0).toFixed(3)} s</div></div>
                 <div class="detail-row"><div class="k">Durum</div><div class="v"><span class="badge ${cls}">${c.success?'Başarılı':'Başarısız'}</span> &nbsp; kod: ${c.return_code}${c.timed_out?' • zaman aşımı':''}</div></div>`;
             if (c.stdout) html += `<div class="detail-row"><div class="k">Çıktı (stdout)</div><div class="console-detail">${esc(c.stdout.slice(0,8000))}</div></div>`;
@@ -761,6 +1201,7 @@
         fetch(`${API}/api/tools/available`).then(r => r.json()).then(data => {
             const h = document.getElementById('health');
             const avail = data.available_tools || 0, total = data.total_tools || 10;
+            if (data.timeouts) { TOOL_TIMEOUTS = data.timeouts; updateTimeoutHelp(); }
             h.className = 'health up'; document.getElementById('health-text').textContent = `Çevrimiçi • ${avail}/${total} araç`;
             document.getElementById('s-tools').innerHTML = avail + '<small> / ' + total + '</small>';
             const all = data.all_tools || {};
@@ -871,7 +1312,9 @@
     loadHistory();
     loadHealth();
     loadTemplates();
+    resumeWorkflow();
     setInterval(loadHistory, 5000);
+    setInterval(() => { if (document.getElementById('panel-recon').classList.contains('active')) loadWorkflows(); }, 5000);
     setInterval(loadHealth, 30000);
     </script>
 </body>

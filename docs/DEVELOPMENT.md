@@ -35,6 +35,10 @@ Open **http://127.0.0.1:5001/**. Or use the launcher: `scripts/start_api.sh` (Li
 - **Backend:** edit `src/backend/kali_server.py`, restart the server, test with curl.
 - **UI:** edit `src/backend/static/dashboard.html`, then hard-refresh the browser (Ctrl+F5).
 - **New parser:** add a `parse_<tool>` function in `findings.py` and register it in `PARSERS`.
+- **Recon workflow:** the pure logic (which ports count as web, command builders, input validation,
+  aggregation) lives in `recon.py` and is unit-tested by `test_recon.py`. The runner (`ReconRunner`)
+  and the `/api/workflows/*` endpoints are in `kali_server.py`. To add a follow-up tool, extend
+  `recon.plan_web_steps` and give the tool a parser in `findings.py`.
 
 ## Testing
 
@@ -44,6 +48,9 @@ python3 src/tests/quick_test.py
 
 # database model tests
 python3 src/tests/test_db_schema.py
+
+# recon workflow logic (web-port detection, validation, commands)
+python3 src/tests/test_recon.py
 
 # full system test (start the server first for the live checks)
 python3 src/tests/test_system.py

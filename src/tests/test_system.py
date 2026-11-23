@@ -114,7 +114,8 @@ def test_live():
 
     (ok if r.status_code == 200 else fail)("GET /health")
     for path, key in [("/", None), ("/api/tools/available", "success"),
-                      ("/api/history", "success"), ("/api/templates", "templates")]:
+                      ("/api/history", "success"), ("/api/templates", "templates"),
+                      ("/api/workflows", "workflows")]:
         try:
             r = _get(path)
             good = r.status_code == 200 and (key is None or key in r.json())
@@ -128,6 +129,13 @@ def test_live():
         (ok if any(t.get("builtin") for t in tpls) else fail)("built-in templates seeded")
     except Exception as e:
         fail("built-in templates seeded", str(e))
+
+    # recon workflow input validation (does not start any scan)
+    try:
+        r = requests.post(BASE_URL + "/api/workflows/recon", json={"target": "10.0.0.0/24"}, timeout=5)
+        (ok if r.status_code == 400 else fail)("POST /api/workflows/recon rejects CIDR")
+    except Exception as e:
+        fail("POST /api/workflows/recon rejects CIDR", str(e))
 
     # static socket.io served
     try:

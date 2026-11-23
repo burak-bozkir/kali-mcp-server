@@ -8,6 +8,7 @@ import sys
 import os
 import argparse
 import logging
+import time
 from typing import Dict, Any, Optional
 import requests
 
@@ -42,6 +43,19 @@ class KaliToolsClient:
         self.timeout = timeout
         logger.info(f"Initialized Kali Tools Client connecting to {server_url}")
         
+    @staticmethod
+    def _http_error(e: "requests.exceptions.HTTPError") -> Dict[str, Any]:
+        """Keep the server's own error message (e.g. validation errors) for the agent."""
+        msg = str(e)
+        try:
+            body = e.response.json()
+            if isinstance(body, dict) and body.get("error"):
+                msg = f"{e.response.status_code}: {body['error']}"
+        except Exception:
+            pass
+        logger.error(f"Request failed: {msg}")
+        return {"error": msg, "success": False}
+
     def safe_get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Perform a GET request with optional query parameters.
@@ -63,6 +77,8 @@ class KaliToolsClient:
             response = requests.get(url, params=params, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            return self._http_error(e)
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {str(e)}")
             return {"error": f"Request failed: {str(e)}", "success": False}
@@ -88,6 +104,8 @@ class KaliToolsClient:
             response = requests.post(url, json=json_data, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
+        except requests.exceptions.HTTPError as e:
+            return self._http_error(e)
         except requests.exceptions.RequestException as e:
             logger.error(f"Request failed: {str(e)}")
             return {"error": f"Request failed: {str(e)}", "success": False}
@@ -107,6 +125,62 @@ class KaliToolsClient:
         """
         return self.safe_post("api/command", {"command": command})
     
+    # ---- long-running scans -------------------------------------------
+    # Scans can take far longer than one MCP/HTTP request may stay open
+    # (gobuster/nikto default to 30 min on the server). So tools start the scan
+    # with "async": true, wait up to `self.timeout - 15` seconds, and if it is
+    # still running return its scan_id — the scan keeps running on Kali and
+    # the agent fetches the result later with scan_status(scan_id).
+    FINAL_STATUSES = ("completed", "failed", "timeout", "cancelled")
+
+    def run_scan(self, endpoint: str, data: Dict[str, Any], timeout: int = 0) -> Dict[str, Any]:
+        body = dict(data)
+        body["async"] = True
+        if timeout and timeout > 0:
+            body["timeout"] = int(timeout)
+        started = self.safe_post(endpoint, body)
+        if "error" in started or not started.get("scan_id") or not started.get("async"):
+            return started      # validation error, or an old server that answered synchronously
+        return self.wait_scan(started["scan_id"], max(30, self.timeout - 15))
+
+    def wait_scan(self, scan_id: str, budget: float) -> Dict[str, Any]:
+        t0 = time.time()
+        while True:
+            snap = self.safe_get(f"api/scans/{scan_id}", {"lines": 0})
+            if "error" in snap:
+                return snap
+            if snap.get("status") in self.FINAL_STATUSES:
+                return self.scan_result(snap)
+            waited = time.time() - t0
+            if waited >= budget:
+                return {
+                    "success": True, "status": "running", "scan_id": scan_id,
+                    "command": snap.get("command"), "elapsed": snap.get("elapsed"),
+                    "timeout": snap.get("timeout"), "progress": snap.get("progress"),
+                    "message": (f"Still running on the Kali server (server-side timeout "
+                                f"{snap.get('timeout')}s). Call scan_status('{scan_id}') later "
+                                f"to get the output; scan_cancel('{scan_id}') stops it."),
+                }
+            time.sleep(min(1 if waited < 10 else 3, max(0.2, budget - waited)))
+
+    def scan_result(self, snap: Dict[str, Any]) -> Dict[str, Any]:
+        """Final result of a finished scan: status, raw output and parsed findings."""
+        out = {k: snap.get(k) for k in ("scan_id", "status", "command", "return_code",
+                                        "timed_out", "elapsed", "timeout", "history_id")}
+        out["success"] = snap.get("status") in ("completed", "timeout")
+        if snap.get("status") == "timeout":
+            out["note"] = "Timed out — output below is partial. Re-run with a larger timeout if needed."
+        hid = snap.get("history_id")
+        if hid:
+            cmd = (self.safe_get(f"api/history/{hid}").get("command") or {})
+            out["stdout"] = cmd.get("stdout", "")
+            out["stderr"] = cmd.get("stderr", "")
+            f = self.safe_get(f"api/history/{hid}/findings")
+            if f.get("supported"):
+                out["findings_summary"] = f.get("summary")
+                out["findings"] = (f.get("findings") or [])[:30]
+        return out
+
     def check_health(self) -> Dict[str, Any]:
         """
         Check the health of the Kali Tools API Server
@@ -129,7 +203,7 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
     mcp = FastMCP("kali-mcp")
     
     @mcp.tool()
-    def nmap_scan(target: str, scan_type: str = "-sV", ports: str = "", additional_args: str = "") -> Dict[str, Any]:
+    def nmap_scan(target: str, scan_type: str = "", ports: str = "", additional_args: str = "", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute an Nmap scan against a target.
         
@@ -138,7 +212,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             scan_type: Scan type (e.g., -sV for version detection)
             ports: Comma-separated list of ports or port ranges
             additional_args: Additional Nmap arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Scan results
         """
@@ -148,10 +223,10 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "ports": ports,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/nmap", data)
+        return kali_client.run_scan("api/tools/nmap", data, timeout)
 
     @mcp.tool()
-    def gobuster_scan(url: str, mode: str = "dir", wordlist: str = "/usr/share/wordlists/dirb/common.txt", additional_args: str = "") -> Dict[str, Any]:
+    def gobuster_scan(url: str, mode: str = "dir", wordlist: str = "/usr/share/wordlists/dirb/common.txt", additional_args: str = "", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute Gobuster to find directories, DNS subdomains, or virtual hosts.
         
@@ -160,7 +235,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             mode: Scan mode (dir, dns, fuzz, vhost)
             wordlist: Path to wordlist file
             additional_args: Additional Gobuster arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Scan results
         """
@@ -170,10 +246,10 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "wordlist": wordlist,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/gobuster", data)
+        return kali_client.run_scan("api/tools/gobuster", data, timeout)
 
     @mcp.tool()
-    def dirb_scan(url: str, wordlist: str = "/usr/share/wordlists/dirb/common.txt", additional_args: str = "") -> Dict[str, Any]:
+    def dirb_scan(url: str, wordlist: str = "/usr/share/wordlists/dirb/common.txt", additional_args: str = "", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute Dirb web content scanner.
         
@@ -181,7 +257,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             url: The target URL
             wordlist: Path to wordlist file
             additional_args: Additional Dirb arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Scan results
         """
@@ -190,17 +267,18 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "wordlist": wordlist,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/dirb", data)
+        return kali_client.run_scan("api/tools/dirb", data, timeout)
 
     @mcp.tool()
-    def nikto_scan(target: str, additional_args: str = "") -> Dict[str, Any]:
+    def nikto_scan(target: str, additional_args: str = "", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute Nikto web server scanner.
         
         Args:
             target: The target URL or IP
             additional_args: Additional Nikto arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Scan results
         """
@@ -208,10 +286,10 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "target": target,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/nikto", data)
+        return kali_client.run_scan("api/tools/nikto", data, timeout)
 
     @mcp.tool()
-    def sqlmap_scan(url: str, data: str = "", additional_args: str = "") -> Dict[str, Any]:
+    def sqlmap_scan(url: str, data: str = "", additional_args: str = "", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute SQLmap SQL injection scanner.
         
@@ -219,7 +297,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             url: The target URL
             data: POST data string
             additional_args: Additional SQLmap arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Scan results
         """
@@ -228,17 +307,18 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "data": data,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/sqlmap", post_data)
+        return kali_client.run_scan("api/tools/sqlmap", post_data, timeout)
 
     @mcp.tool()
-    def metasploit_run(module: str, options: Dict[str, Any] = {}) -> Dict[str, Any]:
+    def metasploit_run(module: str, options: Dict[str, Any] = {}, timeout: int = 0) -> Dict[str, Any]:
         """
         Execute a Metasploit module.
         
         Args:
             module: The Metasploit module path
             options: Dictionary of module options
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Module execution results
         """
@@ -246,7 +326,7 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "module": module,
             "options": options
         }
-        return kali_client.safe_post("api/tools/metasploit", data)
+        return kali_client.run_scan("api/tools/metasploit", data, timeout)
 
     @mcp.tool()
     def hydra_attack(
@@ -256,7 +336,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         username_file: str = "", 
         password: str = "", 
         password_file: str = "", 
-        additional_args: str = ""
+        additional_args: str = "",
+        timeout: int = 0
     ) -> Dict[str, Any]:
         """
         Execute Hydra password cracking tool.
@@ -269,7 +350,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             password: Single password to try
             password_file: Path to password file
             additional_args: Additional Hydra arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Attack results
         """
@@ -282,14 +364,15 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "password_file": password_file,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/hydra", data)
+        return kali_client.run_scan("api/tools/hydra", data, timeout)
 
     @mcp.tool()
     def john_crack(
         hash_file: str, 
         wordlist: str = "/usr/share/wordlists/rockyou.txt", 
         format_type: str = "", 
-        additional_args: str = ""
+        additional_args: str = "",
+        timeout: int = 0
     ) -> Dict[str, Any]:
         """
         Execute John the Ripper password cracker.
@@ -299,7 +382,8 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             wordlist: Path to wordlist file
             format_type: Hash format type
             additional_args: Additional John arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Cracking results
         """
@@ -309,17 +393,18 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "format": format_type,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/john", data)
+        return kali_client.run_scan("api/tools/john", data, timeout)
 
     @mcp.tool()
-    def wpscan_analyze(url: str, additional_args: str = "") -> Dict[str, Any]:
+    def wpscan_analyze(url: str, additional_args: str = "", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute WPScan WordPress vulnerability scanner.
         
         Args:
             url: The target WordPress URL
             additional_args: Additional WPScan arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Scan results
         """
@@ -327,17 +412,18 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "url": url,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/wpscan", data)
+        return kali_client.run_scan("api/tools/wpscan", data, timeout)
 
     @mcp.tool()
-    def enum4linux_scan(target: str, additional_args: str = "-a") -> Dict[str, Any]:
+    def enum4linux_scan(target: str, additional_args: str = "-a", timeout: int = 0) -> Dict[str, Any]:
         """
         Execute Enum4linux Windows/Samba enumeration tool.
         
         Args:
             target: The target IP or hostname
             additional_args: Additional enum4linux arguments
-            
+            timeout: Max run time in seconds (0 = server default for this tool, e.g. gobuster/nikto 1800). Long scans return a scan_id; use scan_status.
+
         Returns:
             Enumeration results
         """
@@ -345,7 +431,157 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
             "target": target,
             "additional_args": additional_args
         }
-        return kali_client.safe_post("api/tools/enum4linux", data)
+        return kali_client.run_scan("api/tools/enum4linux", data, timeout)
+
+    @mcp.tool()
+    def scan_status(scan_id: str, wait: int = 0) -> Dict[str, Any]:
+        """
+        Get the status/result of a scan started by any *_scan tool that returned
+        status "running" (long gobuster/nikto/sqlmap/hydra runs keep going on the server).
+
+        Args:
+            scan_id: The scan_id returned by the tool
+            wait: Seconds to wait for it to finish before answering (0 = answer now)
+
+        Returns:
+            While running: elapsed time, timeout and progress (gobuster reports %).
+            When finished: status, stdout/stderr and parsed findings.
+        """
+        budget = min(max(0, wait), max(30, kali_client.timeout - 15))
+        if budget:
+            return kali_client.wait_scan(scan_id, budget)
+        snap = kali_client.safe_get(f"api/scans/{scan_id}", {"lines": 0})
+        if "error" in snap:
+            return snap
+        if snap.get("status") in kali_client.FINAL_STATUSES:
+            return kali_client.scan_result(snap)
+        return {k: snap.get(k) for k in ("scan_id", "status", "command", "elapsed",
+                                         "timeout", "progress", "total_lines")}
+
+    @mcp.tool()
+    def scan_cancel(scan_id: str) -> Dict[str, Any]:
+        """
+        Stop a running scan (kills the whole process group on the Kali server).
+        Output collected so far is saved to history.
+
+        Args:
+            scan_id: The scan_id returned by the tool
+        """
+        return kali_client.safe_post(f"api/scans/cancel/{scan_id}", {})
+
+    def _compact_workflow(wf: Dict[str, Any], max_findings: int = 25) -> Dict[str, Any]:
+        """Trim a workflow to what an AI agent needs (no raw stdout, top findings only)."""
+        steps = [{k: s.get(k) for k in ("index", "tool", "target", "status", "note",
+                                         "duration", "history_id", "summary")}
+                 for s in wf.get("steps", [])]
+        nmap = next((s for s in wf.get("steps", []) if s.get("tool") == "nmap"), {})
+        return {
+            "workflow_id": wf.get("id"),
+            "target": wf.get("target"),
+            "status": wf.get("status"),
+            "error": wf.get("error") or None,
+            "summary": wf.get("summary"),
+            "open_ports": nmap.get("ports", []),
+            "web_targets": wf.get("web_targets", []),
+            "steps": steps,
+            "top_findings": [{k: f.get(k) for k in ("severity", "tool", "source", "title", "detail")}
+                             for f in (wf.get("findings") or [])[:max_findings]],
+            "report_pdf": f"{kali_client.server_url}/api/workflows/{wf.get('id')}/report",
+        }
+
+    @mcp.tool()
+    def recon_workflow(
+        target: str,
+        run_gobuster: bool = True,
+        run_nikto: bool = True,
+        nmap_args: str = "-T4 -Pn",
+        ports: str = "",
+        wordlist: str = "/usr/share/wordlists/dirb/common.txt",
+        max_web_targets: int = 5,
+        step_timeout: int = 0,
+        wait: bool = True,
+        max_wait: int = 0,
+    ) -> Dict[str, Any]:
+        """
+        Run a chained recon workflow on ONE host: nmap -sV first, then gobuster
+        and/or nikto automatically on every web port nmap discovers
+        (http/https, e.g. 80, 443, 8080). Use this instead of calling nmap,
+        gobuster and nikto one by one. Only scan hosts you are authorized to test.
+
+        Args:
+            target: A single IP or hostname (no URL, no CIDR), e.g. 10.0.0.5
+            run_gobuster: Run gobuster dir on each web port
+            run_nikto: Run nikto on each web port
+            nmap_args: Extra nmap arguments (scan type is -sV)
+            ports: Optional nmap port spec, e.g. "1-1000,8080"
+            wordlist: Wordlist for gobuster
+            max_web_targets: Max number of web ports to follow up (1-20)
+            step_timeout: Timeout per step in seconds (0 = each tool's server default,
+                e.g. nmap 900, gobuster/nikto 1800)
+            wait: If True, block until the workflow finishes (or max_wait passes)
+            max_wait: Seconds to wait when wait=True (0 = client timeout minus a margin)
+
+        Returns:
+            Compact result: status, open ports, web targets, per-step summary and
+            the most severe findings. If still running, call recon_status later.
+        """
+        data = {
+            "target": target, "run_gobuster": run_gobuster, "run_nikto": run_nikto,
+            "nmap_args": nmap_args, "ports": ports, "wordlist": wordlist,
+            "max_web_targets": max_web_targets,
+        }
+        if step_timeout and step_timeout > 0:
+            data["step_timeout"] = step_timeout
+        started = kali_client.safe_post("api/workflows/recon", data)
+        if "error" in started:
+            return started
+        wf_id = started.get("workflow_id")
+        if not wait:
+            return {"workflow_id": wf_id, "status": "running",
+                    "message": "Workflow started. Poll with recon_status(workflow_id)."}
+
+        budget = max_wait if max_wait > 0 else max(30, kali_client.timeout - 15)
+        deadline = time.time() + budget
+        wf = started.get("workflow", {})
+        while time.time() < deadline:
+            time.sleep(3)
+            res = kali_client.safe_get(f"api/workflows/{wf_id}")
+            if "error" in res:
+                continue
+            wf = res.get("workflow", wf)
+            if wf.get("status") != "running":
+                break
+        out = _compact_workflow(wf)
+        if out["status"] == "running":
+            out["message"] = (f"Still running after {budget}s. "
+                              f"Call recon_status('{wf_id}') to get the final result.")
+        return out
+
+    @mcp.tool()
+    def recon_status(workflow_id: str) -> Dict[str, Any]:
+        """
+        Get the current state of a chained recon workflow started with recon_workflow.
+
+        Args:
+            workflow_id: The ID returned by recon_workflow
+
+        Returns:
+            Compact workflow result (status, steps, web targets, top findings)
+        """
+        res = kali_client.safe_get(f"api/workflows/{workflow_id}")
+        if "error" in res:
+            return res
+        return _compact_workflow(res.get("workflow", {}))
+
+    @mcp.tool()
+    def recon_cancel(workflow_id: str) -> Dict[str, Any]:
+        """
+        Cancel a running recon workflow (stops the current step, skips the rest).
+
+        Args:
+            workflow_id: The ID returned by recon_workflow
+        """
+        return kali_client.safe_post(f"api/workflows/{workflow_id}/cancel", {})
 
     @mcp.tool()
     def server_health() -> Dict[str, Any]:

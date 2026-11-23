@@ -44,6 +44,9 @@ except ImportError:
     _sys_imp.path.insert(0, _os_imp.path.dirname(_os_imp.path.abspath(__file__)))
     import findings as findings_parser
 
+# Chained recon workflow helpers (pure logic: web-port detection, commands)
+import recon
+
 # PDF report support (optional)
 import io as _io
 try:
@@ -112,7 +115,33 @@ logger = logging.getLogger(__name__)
 # Configuration
 API_PORT = int(os.environ.get("API_PORT", 5001))
 DEBUG_MODE = os.environ.get("DEBUG_MODE", "0").lower() in ("1", "true", "yes", "y")
-COMMAND_TIMEOUT = int(os.environ.get("COMMAND_TIMEOUT", 180))  # Default per-command timeout in seconds (3 minutes)
+COMMAND_TIMEOUT = int(os.environ.get("COMMAND_TIMEOUT", 180))  # Fallback timeout (generic /api/command, unknown tools)
+MAX_COMMAND_TIMEOUT = int(os.environ.get("MAX_COMMAND_TIMEOUT", 14400))  # Hard cap for any requested timeout (4 h)
+MIN_COMMAND_TIMEOUT = 10
+
+# Per-tool default timeouts (seconds). Directory brute-forcing, nikto and
+# sqlmap routinely need far more than 3 minutes on a real target, so one
+# global value either kills them early or lets a stuck nmap hang forever.
+# Override any of them with an env var, e.g. TIMEOUT_GOBUSTER=3600, or per
+# request with the "timeout" field.
+_DEFAULT_TOOL_TIMEOUTS = {
+    "nmap": 900, "gobuster": 1800, "dirb": 1800, "nikto": 1800, "sqlmap": 1800,
+    "wpscan": 1200, "enum4linux": 600, "hydra": 3600, "john": 3600, "metasploit": 900,
+}
+TOOL_TIMEOUTS = {t: int(os.environ.get(f"TIMEOUT_{t.upper()}", v))
+                 for t, v in _DEFAULT_TOOL_TIMEOUTS.items()}
+
+
+def resolve_timeout(tool_name: Optional[str], requested: Any = None) -> int:
+    """Timeout for one run: the request's value (clamped) or the tool's default.
+
+    Raises ValueError if `requested` is not a number.
+    """
+    base = TOOL_TIMEOUTS.get((tool_name or "").lower(), COMMAND_TIMEOUT)
+    if requested in (None, "", 0, "0"):
+        return base
+    value = int(requested)
+    return max(MIN_COMMAND_TIMEOUT, min(value, MAX_COMMAND_TIMEOUT))
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "scan_history.db")
 # How long (seconds) to cache tool-availability results before re-checking with `which`
 TOOL_STATUS_CACHE_TTL = int(os.environ.get("TOOL_STATUS_CACHE_TTL", 60))
@@ -184,8 +213,11 @@ db = SQLAlchemy(app, model_class=Base)
 # Initialize SocketIO for real-time communication
 socketio = None
 if SOCKETIO_AVAILABLE:
-    socketio = SocketIO(app, cors_allowed_origins="*")
-    logger.info("Flask-SocketIO initialized for real-time scanning")
+    # Force "threading": scans use real OS threads and blocking subprocess calls.
+    # If eventlet/gevent happen to be installed, auto-detection would pick them
+    # and (without monkey patching) live events would never leave the server.
+    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+    logger.info(f"Flask-SocketIO initialized (async_mode={socketio.async_mode})")
 else:
     logger.warning(logger_warning)
 
@@ -359,6 +391,48 @@ class ScanTemplate(db.Model):
             "builtin": self.builtin,
             "created_at": self.created_at.isoformat(),
         }
+
+
+# ============================================================================
+# Recon Workflow Model - chained nmap → gobuster/nikto runs
+# ============================================================================
+
+class ReconWorkflow(db.Model):
+    """One chained recon run. Steps/options are stored as JSON text."""
+    __tablename__ = 'recon_workflows'
+
+    id = db.Column(db.String(36), primary_key=True)
+    target = db.Column(db.String(255), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="running")
+    options = db.Column(db.Text, nullable=True)
+    steps = db.Column(db.Text, nullable=True)
+    web_targets = db.Column(db.Text, nullable=True)
+    error = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    finished_at = db.Column(db.DateTime, nullable=True)
+
+    def to_dict(self, include_findings: bool = False):
+        steps = json.loads(self.steps or "[]")
+        web = json.loads(self.web_targets or "[]")
+        data = {
+            "id": self.id,
+            "target": self.target,
+            "status": self.status,
+            "options": json.loads(self.options or "{}"),
+            "web_targets": web,
+            "error": self.error or "",
+            "created_at": self.created_at.isoformat(),
+            "finished_at": self.finished_at.isoformat() if self.finished_at else None,
+            "summary": recon.summarize(steps, web),
+        }
+        if include_findings:
+            data["steps"] = steps
+            data["findings"] = recon.combined_findings(steps)
+        else:
+            # light step view for lists
+            data["steps"] = [{k: s.get(k) for k in ("index", "tool", "target", "status")}
+                             for s in steps]
+        return data
 
 
 # Built-in templates seeded on first run
@@ -637,15 +711,48 @@ class CommandHistory:
 command_history = CommandHistory(max_history=100)  # Keep last 100 scans in database
 seed_default_templates()  # Insert built-in scan templates on first run
 
-# Global dictionary to track active scans
+# Global dictionary to track active scans (scan_id -> CommandExecutor), used for cancel
 active_scans = {}
+
+# Every recent scan (running or finished) by scan_id, so clients can poll the
+# buffered output even if they missed WebSocket events or reloaded the page.
+from collections import OrderedDict as _OrderedDict
+import re as _re
+scan_registry = _OrderedDict()   # scan_id -> CommandExecutor
+_scan_registry_lock = threading.Lock()
+MAX_REGISTRY_SCANS = 200        # finished scans kept for polling (oldest dropped first)
+MAX_BUFFER_LINES = 5000         # live-output lines kept in memory per scan
+MAX_LINES_PER_POLL = 2000
+
+# ANSI escape codes (gobuster prefixes results with "\r\x1b[2K" to clear the line)
+_ANSI_RE = _re.compile(r'\x1b\[[0-9;?]*[A-Za-z]')
+# gobuster: "Progress: 1234 / 4615 (26.74%)"
+_PROGRESS_RE = _re.compile(r'^Progress:\s*([\d,]+)\s*/\s*([\d,]+)\s*\((\d+(?:\.\d+)?)%\)')
+
+SCAN_FINAL_STATUSES = ("completed", "failed", "timeout", "cancelled")
+
+
+def _register_scan(executor):
+    with _scan_registry_lock:
+        scan_registry[executor.scan_id] = executor
+        scan_registry.move_to_end(executor.scan_id)
+        if len(scan_registry) > MAX_REGISTRY_SCANS:
+            for sid in list(scan_registry.keys()):
+                if len(scan_registry) <= MAX_REGISTRY_SCANS:
+                    break
+                if scan_registry[sid].status in SCAN_FINAL_STATUSES:
+                    del scan_registry[sid]
 
 
 class CommandExecutor:
     """Class to handle command execution with real-time streaming support"""
     
-    def __init__(self, command: str, timeout: int = COMMAND_TIMEOUT, scan_id: str = None, socketio_obj=None):
+    def __init__(self, command: str, timeout: int = COMMAND_TIMEOUT, scan_id: str = None, socketio_obj=None,
+                 extra_rooms: Optional[List[str]] = None):
         self.command = command
+        # Additional Socket.IO rooms that also receive this scan's events
+        # (e.g. a recon workflow room, so the UI follows every step live)
+        self.extra_rooms = [r for r in (extra_rooms or []) if r]
         self.timeout = timeout
         self.process = None
         self.stdout_data = ""
@@ -659,12 +766,26 @@ class CommandExecutor:
         self.socketio_obj = socketio_obj
         self.start_time = None
         self.line_count = 0
-    
+        # Buffered live output: [{"n": abs_index, "type": "stdout"|"stderr", "line": str}]
+        self.lines: List[Dict[str, Any]] = []
+        self.line_base = 0              # absolute index of self.lines[0]
+        self.buffer_lock = threading.Lock()
+        self.progress: Optional[Dict[str, Any]] = None   # {"done", "total", "percent"}
+        self._last_progress_emit = 0.0
+        self.status = "starting"        # starting|running|completed|failed|timeout|cancelled
+        self.final_status: Optional[str] = None
+        self.history_id: Optional[str] = None
+        self.tool_name: Optional[str] = None
+        self.target: Optional[str] = None
+        self.end_time: Optional[float] = None
+        
     def _emit_event(self, event_name: str, data: dict):
         """Emit WebSocket event if socketio is available"""
         if self.socketio_obj and SOCKETIO_AVAILABLE:
             try:
-                self.socketio_obj.emit(event_name, {**data, "scan_id": self.scan_id}, room=self.scan_id)
+                payload = {**data, "scan_id": self.scan_id}
+                for room in [self.scan_id] + self.extra_rooms:
+                    self.socketio_obj.emit(event_name, payload, room=room)
             except Exception as e:
                 logger.debug(f"Error emitting event {event_name}: {e}")
 
@@ -708,48 +829,85 @@ class CommandExecutor:
                 pass
             return False
     
+    def _buffer_line(self, kind: str, line: str):
+        with self.buffer_lock:
+            self.lines.append({"n": self.line_base + len(self.lines), "type": kind, "line": line})
+            if len(self.lines) > MAX_BUFFER_LINES:
+                drop = len(self.lines) - MAX_BUFFER_LINES
+                del self.lines[:drop]
+                self.line_base += drop
+
+    def _handle_line(self, kind: str, raw: str):
+        """Clean one output line, buffer it and stream it."""
+        clean = _ANSI_RE.sub('', raw)
+        text = clean.rstrip('\r\n')
+        m = _PROGRESS_RE.match(text.strip())
+        if m:
+            # progress ticker (gobuster): update the % instead of flooding the console/DB
+            done, total, pct = m.groups()
+            self.progress = {"done": int(done.replace(',', '')), "total": int(total.replace(',', '')),
+                             "percent": float(pct)}
+            now = time.time()
+            if now - self._last_progress_emit >= 1:
+                self._last_progress_emit = now
+                self._emit_event('scan_progress', {**self.progress, 'elapsed': now - self.start_time})
+            return
+        if kind == 'stdout':
+            self.stdout_data += clean
+            self.line_count += 1
+        else:
+            self.stderr_data += clean
+        if not text.strip():
+            return      # blank line left over from a "\r" line-clear
+        self._buffer_line(kind, text)
+        self._emit_event('scan_output', {
+            'type': kind,
+            'line': text,
+            'line_count': self.line_count,
+            'elapsed': time.time() - self.start_time,
+            'is_error': kind == 'stderr',
+        })
+
     def _read_stdout(self):
         """Thread function to continuously read and stream stdout"""
         for line in iter(self.process.stdout.readline, ''):
-            self.stdout_data += line
-            self.line_count += 1
-            
-            # Emit real-time output
-            elapsed = time.time() - self.start_time
-            eta = self._calculate_eta(self.line_count, elapsed) if self.line_count > 0 else 0
-            
-            self._emit_event('scan_output', {
-                'type': 'stdout',
-                'line': line.rstrip('\n'),
-                'line_count': self.line_count,
-                'elapsed': elapsed,
-                'eta': eta
-            })
-    
+            self._handle_line('stdout', line)
+
     def _read_stderr(self):
         """Thread function to continuously read and stream stderr"""
         for line in iter(self.process.stderr.readline, ''):
-            self.stderr_data += line
-            self._emit_event('scan_output', {
-                'type': 'stderr',
-                'line': line.rstrip('\n'),
-                'is_error': True
-            })
-    
-    def _calculate_eta(self, lines_so_far: int, elapsed_seconds: float) -> int:
-        """Estimate time to completion based on line processing rate"""
-        if lines_so_far == 0 or elapsed_seconds == 0:
-            return 0
-        
-        # Estimate based on average lines per second
-        avg_line_time = elapsed_seconds / lines_so_far
-        # Assume typical scan produces 100-1000 lines (conservative estimate: 500)
-        estimated_total_lines = max(lines_so_far + 100, min(lines_so_far * 2, self.timeout * 10))
-        remaining_lines = max(0, estimated_total_lines - lines_so_far)
-        
-        return int(remaining_lines * avg_line_time)
-    
-    
+            self._handle_line('stderr', line)
+
+    def snapshot(self, since: int = 0, include_lines: bool = True) -> Dict[str, Any]:
+        """State + buffered output from absolute line `since` (for polling clients)."""
+        since = max(0, int(since or 0))
+        with self.buffer_lock:
+            total = self.line_base + len(self.lines)
+            start = max(since, self.line_base)
+            chunk = self.lines[start - self.line_base:] if include_lines else []
+            more = len(chunk) > MAX_LINES_PER_POLL
+            chunk = chunk[:MAX_LINES_PER_POLL]
+        end = (self.end_time or time.time()) if self.start_time else None
+        return {
+            "success": True,
+            "scan_id": self.scan_id,
+            "tool": self.tool_name,
+            "target": self.target,
+            "command": self.command,
+            "status": self.status,
+            "elapsed": round(end - self.start_time, 1) if end else 0.0,
+            "timeout": self.timeout,
+            "progress": self.progress,
+            "return_code": self.return_code,
+            "timed_out": self.timed_out,
+            "history_id": self.history_id,
+            "lines": chunk,
+            "next": (start + len(chunk)) if include_lines else total,
+            "total_lines": total,
+            "skipped": max(0, self.line_base - since) if include_lines else 0,
+            "more": more,
+        }
+
     def execute(self) -> Dict[str, Any]:
         """Execute the command with real-time streaming and timeout handling"""
         logger.info(f"Executing command: {self.command} [scan_id: {self.scan_id}]")
@@ -759,6 +917,9 @@ class CommandExecutor:
             
             # Register this scan in active scans
             active_scans[self.scan_id] = self
+            if not self.command.strip().startswith("which "):
+                _register_scan(self)
+            self.status = "running"
             
             self._emit_event('scan_started', {'command': self.command})
             
@@ -822,6 +983,12 @@ class CommandExecutor:
             
             # Always consider it a success if we have output, even with timeout
             success = True if self.timed_out and (self.stdout_data or self.stderr_data) else (self.return_code == 0)
+            if self.timed_out:
+                self.final_status = "timeout"
+            elif self.cancelled:
+                self.final_status = "cancelled"
+            else:
+                self.final_status = "completed" if self.return_code == 0 else "failed"
             
             result = {
                 "stdout": self.stdout_data,
@@ -845,7 +1012,9 @@ class CommandExecutor:
             # Remove from active scans
             if self.scan_id in active_scans:
                 del active_scans[self.scan_id]
-            
+            self.final_status = "failed"
+            self._buffer_line('stderr', f"Error executing command: {e}")
+
             return {
                 "stdout": self.stdout_data,
                 "stderr": f"Error executing command: {str(e)}\n{self.stderr_data}",
@@ -856,34 +1025,102 @@ class CommandExecutor:
             }
 
 
-def execute_command(command: str, record_history: bool = True, tool_name: str = None, 
-                   target: str = None, scan_id: str = None) -> Dict[str, Any]:
+def execute_command(command: str, record_history: bool = True, tool_name: str = None,
+                   target: str = None, scan_id: str = None, timeout: int = None,
+                   extra_rooms: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Execute a shell command with real-time streaming support
-    
+
     Args:
         command: The command to execute
         record_history: Whether to record this command in history
         tool_name: Name of the tool being executed (for history)
         target: Target being scanned (for history)
         scan_id: Unique scan ID for WebSocket streaming
-        
+        timeout: Per-command timeout in seconds (default: COMMAND_TIMEOUT)
+        extra_rooms: Extra Socket.IO rooms that also receive the live output
+
     Returns:
         A dictionary containing the stdout, stderr, return code, and streaming info
     """
+    executor = create_executor(command, tool_name=tool_name, target=target, scan_id=scan_id,
+                               timeout=timeout, extra_rooms=extra_rooms)
+    return run_executor(executor, record_history=record_history)
+
+
+def create_executor(command: str, tool_name: str = None, target: str = None, scan_id: str = None,
+                    timeout: int = None, extra_rooms: Optional[List[str]] = None) -> CommandExecutor:
+    """Build an executor and register it (status "starting") so it can be polled right away."""
+    executor = CommandExecutor(command, timeout=timeout or COMMAND_TIMEOUT, scan_id=scan_id,
+                               socketio_obj=socketio if SOCKETIO_AVAILABLE else None,
+                               extra_rooms=extra_rooms)
+    executor.tool_name = tool_name
+    executor.target = target
+    if not command.strip().startswith("which "):
+        _register_scan(executor)
+    return executor
+
+
+def run_executor(executor: CommandExecutor, record_history: bool = True) -> Dict[str, Any]:
+    """Run a created executor to completion, record it, and finalize its status."""
     start_time = time.time()
-    executor = CommandExecutor(command, scan_id=scan_id, socketio_obj=socketio if SOCKETIO_AVAILABLE else None)
     result = executor.execute()
     duration = time.time() - start_time
-    
+
     # Record in history if requested
     if record_history:
-        command_history.add_command(command, result, duration, tool_name=tool_name, target=target)
-    
+        executor.history_id = command_history.add_command(
+            executor.command, result, duration, tool_name=executor.tool_name,
+            target=executor.target) or None
+        result['history_id'] = executor.history_id
+
     # Add scan ID to result
     result['scan_id'] = executor.scan_id
-    
+    result['duration'] = duration
+    result['cancelled'] = executor.cancelled and not executor.timed_out
+    result['status'] = executor.final_status or "failed"
+    result['timeout'] = executor.timeout
+
+    # Final status only now, so a poller that sees it can also see history_id
+    executor.end_time = time.time()
+    executor.status = result['status']
     return result
+
+
+def run_tool(params: Dict[str, Any], command: str, tool_name: str, target: str,
+             scan_id: str, on_done=None):
+    """
+    Shared runner for the /api/tools/<tool> endpoints.
+
+    - "timeout" (seconds) overrides the tool's default timeout.
+    - "async": true returns 202 immediately; poll GET /api/scans/<scan_id>
+      for live output and the final status. Without it the request blocks
+      until the scan finishes (the original behaviour).
+    """
+    try:
+        timeout = resolve_timeout(tool_name, params.get("timeout"))
+    except (TypeError, ValueError):
+        return jsonify({"error": "'timeout' must be a number of seconds"}), 400
+
+    executor = create_executor(command, tool_name=tool_name, target=target,
+                               scan_id=scan_id, timeout=timeout)
+
+    def _run():
+        try:
+            return run_executor(executor)
+        finally:
+            if on_done:
+                try:
+                    on_done()
+                except Exception as e:
+                    logger.warning(f"Cleanup after {tool_name} failed: {e}")
+
+    if params.get("async"):
+        threading.Thread(target=_run, name=f"scan-{executor.scan_id[:16]}", daemon=True).start()
+        return jsonify({"success": True, "async": True, "scan_id": executor.scan_id,
+                        "status": "running", "command": command, "timeout": timeout,
+                        "status_url": f"/api/scans/{executor.scan_id}"}), 202
+    return jsonify(_run())
 
 
 def check_tool_availability(tool_name: str) -> bool:
@@ -1075,8 +1312,7 @@ def nmap():
         
         command += f" {target}"
         
-        result = execute_command(command, tool_name="nmap", target=target, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "nmap", target, scan_id)
     except Exception as e:
         logger.error(f"Error in nmap endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1115,8 +1351,7 @@ def gobuster():
             command += f" {additional_args}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="gobuster", target=url, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "gobuster", url, scan_id)
     except Exception as e:
         logger.error(f"Error in gobuster endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1145,8 +1380,7 @@ def dirb():
             command += f" {additional_args}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="dirb", target=url, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "dirb", url, scan_id)
     except Exception as e:
         logger.error(f"Error in dirb endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1174,8 +1408,7 @@ def nikto():
             command += f" {additional_args}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="nikto", target=target, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "nikto", target, scan_id)
     except Exception as e:
         logger.error(f"Error in nikto endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1207,8 +1440,7 @@ def sqlmap():
             command += f" {additional_args}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="sqlmap", target=url, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "sqlmap", url, scan_id)
     except Exception as e:
         logger.error(f"Error in sqlmap endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1248,15 +1480,8 @@ def metasploit():
         
         command = f"msfconsole -q -r {resource_file}"
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="metasploit", target=module, scan_id=scan_id)
-        
-        # Clean up the temporary file
-        try:
-            os.remove(resource_file)
-        except Exception as e:
-            logger.warning(f"Error removing temporary resource file: {str(e)}")
-        
-        return jsonify(result)
+        return run_tool(params, command, "metasploit", module, scan_id,
+                        on_done=lambda: os.path.exists(resource_file) and os.remove(resource_file))
     except Exception as e:
         logger.error(f"Error in metasploit endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1307,8 +1532,7 @@ def hydra():
         command += f" {target} {service}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="hydra", target=target, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "hydra", target, scan_id)
     except Exception as e:
         logger.error(f"Error in hydra endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1346,8 +1570,7 @@ def john():
         command += f" {hash_file}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="john", target=hash_file, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "john", hash_file, scan_id)
     except Exception as e:
         logger.error(f"Error in john endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1375,8 +1598,7 @@ def wpscan():
             command += f" {additional_args}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="wpscan", target=url, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "wpscan", url, scan_id)
     except Exception as e:
         logger.error(f"Error in wpscan endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1401,8 +1623,7 @@ def enum4linux():
         command = f"enum4linux {additional_args} {target}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
-        result = execute_command(command, tool_name="enum4linux", target=target, scan_id=scan_id)
-        return jsonify(result)
+        return run_tool(params, command, "enum4linux", target, scan_id)
     except Exception as e:
         logger.error(f"Error in enum4linux endpoint: {str(e)}")
         logger.error(traceback.format_exc())
@@ -1508,7 +1729,8 @@ def list_available_tools():
             "available_tools": available_count,
             "unavailable_tools": total_count - available_count,
             "tools_by_category": tools_by_category,
-            "all_tools": tools_status
+            "all_tools": tools_status,
+            "timeouts": {**TOOL_TIMEOUTS, "default": COMMAND_TIMEOUT, "max": MAX_COMMAND_TIMEOUT}
         })
     except Exception as e:
         logger.error(f"Error listing available tools: {str(e)}")
@@ -1922,19 +2144,20 @@ SEV_COLORS = {
 SEV_LABEL = {"high": "HIGH", "medium": "MEDIUM", "low": "LOW", "info": "INFO"}
 
 
-def _findings_section(story, styles, findings_data):
+def _findings_section(story, styles, findings_data, show_overview: bool = True):
     """Append parsed findings (ports table + findings list) to the PDF story."""
     if not findings_data or not findings_data.get("supported"):
         return
     s = findings_data.get("summary", {})
 
-    story.append(Paragraph("Findings Overview", styles['KSection']))
-    story.append(_meta_table([
-        ("Open ports", s.get("open_ports", 0)),
-        ("High risk", s.get("high", 0)),
-        ("Medium risk", s.get("medium", 0)),
-        ("Low / Info", s.get("low", 0) + s.get("info", 0)),
-    ], styles))
+    if show_overview:
+        story.append(Paragraph("Findings Overview", styles['KSection']))
+        story.append(_meta_table([
+            ("Open ports", s.get("open_ports", 0)),
+            ("High risk", s.get("high", 0)),
+            ("Medium risk", s.get("medium", 0)),
+            ("Low / Info", s.get("low", 0) + s.get("info", 0)),
+        ], styles))
 
     ports = findings_data.get("ports", [])
     if ports:
@@ -2164,6 +2387,397 @@ def summary_report():
 
 
 # ============================================================================
+# Chained Recon Workflow  (nmap → gobuster / nikto on every web port found)
+# ============================================================================
+#
+# POST /api/workflows/recon starts a background thread (ReconRunner) and
+# returns 202 immediately. The runner:
+#   1. runs nmap on the host,
+#   2. parses the open ports (findings.parse_nmap) and picks the web ones
+#      (recon.web_targets_from_ports),
+#   3. runs gobuster and/or nikto on each web URL, one step at a time.
+# Every step is a normal scan: it lands in <tool>_history, streams over
+# Socket.IO (to its own scan room AND the workflow room) and can be cancelled.
+# The workflow itself (steps, statuses, trimmed findings) is persisted in
+# recon_workflows so it survives a page reload.
+
+import shutil as _shutil
+from xml.sax.saxutils import escape as _xesc
+
+MAX_CONCURRENT_WORKFLOWS = int(os.environ.get("MAX_CONCURRENT_WORKFLOWS", 2))
+active_workflows: Dict[str, "ReconRunner"] = {}
+_workflow_db_lock = threading.Lock()
+
+
+def _utc_iso() -> str:
+    return datetime.utcnow().isoformat()
+
+
+class ReconRunner:
+    """Runs one chained recon workflow in a background thread."""
+
+    def __init__(self, workflow_id: str, opts: Dict[str, Any]):
+        self.id = workflow_id
+        self.opts = opts
+        self.target = opts["target"]
+        self.steps: List[Dict[str, Any]] = []
+        self.web_targets: List[Dict[str, Any]] = []
+        self.status = "running"
+        self.error = ""
+        self.cancelled = False
+        self.current_scan_id: Optional[str] = None
+
+    # ---- persistence / events ------------------------------------------
+    def _emit(self, event: str, data: Dict[str, Any]):
+        if SOCKETIO_AVAILABLE and socketio:
+            try:
+                socketio.emit(event, {**data, "workflow_id": self.id}, room=self.id)
+            except Exception as e:
+                logger.debug(f"Error emitting {event}: {e}")
+
+    def save(self, finished: bool = False):
+        with _workflow_db_lock, app.app_context():
+            wf = db.session.get(ReconWorkflow, self.id)
+            if wf is None:
+                wf = ReconWorkflow(id=self.id, target=self.target,
+                                   options=json.dumps(self.opts, ensure_ascii=False))
+                db.session.add(wf)
+            wf.status = self.status
+            wf.steps = json.dumps(self.steps, ensure_ascii=False)
+            wf.web_targets = json.dumps(self.web_targets, ensure_ascii=False)
+            wf.error = self.error[:500] if self.error else None
+            if finished:
+                wf.finished_at = datetime.utcnow()
+            db.session.commit()
+            payload = wf.to_dict()
+        self._emit("workflow_update", payload)
+
+    # ---- control --------------------------------------------------------
+    def cancel(self):
+        """Stop the workflow: kill the running step and skip the rest."""
+        self.cancelled = True
+        # The step may be a split second away from registering its executor
+        deadline = time.time() + 2
+        while time.time() < deadline:
+            sid = self.current_scan_id
+            if sid is None:
+                return
+            executor = active_scans.get(sid)
+            if executor is not None:
+                executor.terminate()
+                return
+            time.sleep(0.1)
+
+    # ---- execution ------------------------------------------------------
+    def _run_step(self, step: Dict[str, Any]) -> Dict[str, Any]:
+        """Run one step in place. Returns the parsed findings dict."""
+        empty = {"ports": [], "findings": [], "summary": None}
+        if self.cancelled:
+            step["status"] = "cancelled"
+            return empty
+        if not _shutil.which(step["tool"]):
+            step["status"] = "failed" if step["tool"] == "nmap" else "skipped"
+            step["note"] = f"{step['tool']} kurulu değil / PATH'te bulunamadı"
+            self.save()
+            return empty
+
+        # Per-tool default (gobuster/nikto: 30 min) unless the user set step_timeout
+        timeout = resolve_timeout(step["tool"], self.opts.get("step_timeout"))
+        step.update(status="running", scan_id=f"{self.id}_s{step['index']}",
+                    started_at=_utc_iso(), timeout=timeout)
+        # Register the executor BEFORE announcing the step, so a client polling
+        # /api/scans/<scan_id> never gets a 404 for a step marked "running".
+        executor = create_executor(step["command"], tool_name=step["tool"], target=step["target"],
+                                   scan_id=step["scan_id"], timeout=timeout, extra_rooms=[self.id])
+        self.current_scan_id = step["scan_id"]
+        self.save()
+        self._emit("workflow_step_started", {k: step[k] for k in
+                                             ("index", "tool", "target", "command", "scan_id")})
+
+        result = run_executor(executor)
+        self.current_scan_id = None
+
+        stdout = result.get("stdout") or ""
+        stderr = result.get("stderr") or ""
+        parsed = findings_parser.parse_findings(step["tool"], step["command"], stdout, stderr)
+        rc = result.get("return_code")
+        step.update(history_id=result.get("history_id"), finished_at=_utc_iso(),
+                    duration=round(result.get("duration", 0.0), 2), return_code=rc,
+                    timed_out=bool(result.get("timed_out")),
+                    summary=parsed.get("summary"),
+                    findings=recon.trim_findings(parsed.get("findings", [])),
+                    ports=parsed.get("ports", []))
+
+        if self.cancelled or result.get("cancelled"):
+            step["status"] = "cancelled"
+            step["note"] = "İptal edildi"
+        elif result.get("timed_out"):
+            step["status"] = "done"
+            step["note"] = f"Zaman aşımı ({timeout}s) — kısmi sonuç"
+        elif result.get("success"):
+            step["status"] = "done"
+        elif stdout.strip() and parsed.get("findings"):
+            # some tools (nikto, gobuster) exit non-zero even with useful output
+            step["status"] = "done"
+            step["note"] = f"Çıkış kodu {rc} — çıktı yine de ayrıştırıldı"
+        else:
+            step["status"] = "failed"
+            first_err = next((l.strip() for l in stderr.splitlines() if l.strip()), "")
+            step["note"] = (first_err[:200] or f"Çıkış kodu {rc}")
+        self.save()
+        return parsed
+
+    def _finish(self, status: str):
+        for s in self.steps:
+            if s["status"] in ("pending", "running"):
+                s["status"] = "cancelled" if status == "cancelled" else "skipped"
+        self.status = status
+        self.save(finished=True)
+        self._emit("workflow_finished", {"status": status})
+        logger.info(f"Recon workflow {self.id} finished: {status}")
+
+    def run(self):
+        try:
+            nmap_step = recon.new_step(0, "nmap", self.target, recon.build_nmap_command(self.opts))
+            self.steps.append(nmap_step)
+            self.save()
+
+            parsed = self._run_step(nmap_step)
+            if self.cancelled:
+                return self._finish("cancelled")
+            if nmap_step["status"] != "done":
+                self.error = "Nmap adımı başarısız — zincir devam ettirilmedi. " + nmap_step["note"]
+                return self._finish("failed")
+
+            found = recon.web_targets_from_ports(parsed.get("ports", []), self.target,
+                                                 limit=recon.HARD_MAX_WEB_TARGETS)
+            self.web_targets = found[:self.opts["max_web_targets"]]
+            notes = []
+            if len(found) > len(self.web_targets):
+                notes.append(f"{len(found)} web portu bulundu, ilk {len(self.web_targets)} tanesi "
+                             f"taranacak (max_web_targets)")
+            if not self.web_targets:
+                notes.append("Web portu bulunamadı — gobuster/nikto adımları yok.")
+            elif not (self.opts["run_gobuster"] or self.opts["run_nikto"]):
+                notes.append("Gobuster ve Nikto kapalı — yalnızca nmap çalıştı.")
+            nmap_step["note"] = " ".join(filter(None, [nmap_step["note"]] + notes))
+
+            for i, s in enumerate(recon.plan_web_steps(self.web_targets, self.opts), start=1):
+                self.steps.append(recon.new_step(i, s["tool"], s["target"], s["command"]))
+            self.save()
+
+            for step in self.steps[1:]:
+                if self.cancelled:
+                    break
+                self._run_step(step)
+
+            self._finish("cancelled" if self.cancelled else "completed")
+        except Exception as e:
+            logger.error(f"Recon workflow {self.id} crashed: {e}")
+            logger.error(traceback.format_exc())
+            self.error = f"Beklenmeyen hata: {e}"
+            try:
+                self._finish("failed")
+            except Exception:
+                pass
+        finally:
+            active_workflows.pop(self.id, None)
+
+
+def _recover_interrupted_workflows():
+    """Workflows left 'running' by a previous server process can never finish."""
+    try:
+        with app.app_context():
+            stale = ReconWorkflow.query.filter_by(status="running").all()
+            for wf in stale:
+                steps = json.loads(wf.steps or "[]")
+                for s in steps:
+                    if s.get("status") in ("pending", "running"):
+                        s["status"] = "cancelled"
+                wf.steps = json.dumps(steps, ensure_ascii=False)
+                wf.status = "failed"
+                wf.error = "Sunucu yeniden başlatıldı — akış yarıda kaldı"
+                wf.finished_at = datetime.utcnow()
+            if stale:
+                db.session.commit()
+                logger.info(f"Marked {len(stale)} interrupted recon workflow(s) as failed")
+    except Exception as e:
+        logger.error(f"Error recovering workflows: {e}")
+
+
+_recover_interrupted_workflows()
+
+
+@app.route("/api/workflows/recon", methods=["POST"])
+def start_recon_workflow():
+    """Start a chained recon workflow (nmap → gobuster/nikto) in the background."""
+    try:
+        opts, err = recon.normalize_options(request.get_json(silent=True) or {})
+        if err:
+            return jsonify({"error": err}), 400
+        if len(active_workflows) >= MAX_CONCURRENT_WORKFLOWS:
+            return jsonify({"error": f"Aynı anda en fazla {MAX_CONCURRENT_WORKFLOWS} recon akışı "
+                                     f"çalışabilir — birinin bitmesini bekleyin veya iptal edin"}), 429
+
+        # The client may pick the ID (a UUID) so it can join the Socket.IO room
+        # BEFORE the first nmap line is emitted — same idea as scan_id.
+        body = request.get_json(silent=True) or {}
+        workflow_id = str(body.get("workflow_id") or "").strip().lower()
+        if workflow_id:
+            try:
+                workflow_id = str(uuid.UUID(workflow_id))
+            except ValueError:
+                return jsonify({"error": "workflow_id must be a UUID"}), 400
+            if workflow_id in active_workflows or db.session.get(ReconWorkflow, workflow_id):
+                return jsonify({"error": "workflow_id already exists"}), 409
+        else:
+            workflow_id = str(uuid.uuid4())
+        runner = ReconRunner(workflow_id, opts)
+        runner.save()  # persist before returning so GET works right away
+        active_workflows[workflow_id] = runner
+        threading.Thread(target=runner.run, name=f"recon-{workflow_id[:8]}", daemon=True).start()
+        logger.info(f"Started recon workflow {workflow_id} on {opts['target']}")
+
+        with app.app_context():
+            wf = db.session.get(ReconWorkflow, workflow_id)
+            data = wf.to_dict(include_findings=True)
+        return jsonify({"success": True, "workflow_id": workflow_id, "workflow": data}), 202
+    except Exception as e:
+        logger.error(f"Error starting recon workflow: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+
+@app.route("/api/workflows", methods=["GET"])
+def list_workflows():
+    """List recent recon workflows (newest first, light step view)."""
+    try:
+        limit = min(request.args.get("limit", 20, type=int), 100)
+        rows = ReconWorkflow.query.order_by(ReconWorkflow.created_at.desc()).limit(limit).all()
+        return jsonify({"success": True, "count": len(rows),
+                        "active": len(active_workflows),
+                        "workflows": [w.to_dict() for w in rows]})
+    except Exception as e:
+        logger.error(f"Error listing workflows: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+
+@app.route("/api/workflows/<workflow_id>", methods=["GET"])
+def get_workflow(workflow_id):
+    """Full workflow state: steps, web targets, summary and combined findings."""
+    try:
+        wf = db.session.get(ReconWorkflow, workflow_id)
+        if not wf:
+            return jsonify({"error": "Workflow not found"}), 404
+        return jsonify({"success": True, "workflow": wf.to_dict(include_findings=True)})
+    except Exception as e:
+        logger.error(f"Error getting workflow: {e}")
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+
+@app.route("/api/workflows/<workflow_id>/cancel", methods=["POST"])
+def cancel_workflow(workflow_id):
+    """Cancel a running workflow (kills the current step, skips the rest)."""
+    runner = active_workflows.get(workflow_id)
+    if runner is None:
+        return jsonify({"error": "Workflow is not running"}), 404
+    logger.info(f"Cancelling recon workflow {workflow_id}")
+    runner.cancel()
+    return jsonify({"success": True, "message": f"Workflow {workflow_id} cancelling"})
+
+
+def build_workflow_pdf(wf: Dict[str, Any]) -> bytes:
+    """PDF report for one recon workflow: overview, steps, findings per step."""
+    buf = _io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, topMargin=22 * mm, bottomMargin=18 * mm,
+                            leftMargin=18 * mm, rightMargin=18 * mm)
+    styles = _report_styles()
+    s = wf.get("summary", {})
+    story = [Paragraph("Chained Recon Report", styles['KTitle']),
+             Paragraph(f"Report generated on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC",
+                       styles['KSub'])]
+
+    story.append(Paragraph("Workflow Summary", styles['KSection']))
+    web_urls = ", ".join(w.get("url", "") for w in wf.get("web_targets", [])) or "-"
+    story.append(_meta_table([
+        ("Target", wf.get("target") or "-"),
+        ("Status", (wf.get("status") or "-").upper()),
+        ("Started", (wf.get("created_at") or "-")[:19].replace("T", " ")),
+        ("Finished", (wf.get("finished_at") or "-")[:19].replace("T", " ")),
+        ("Open ports", s.get("open_ports", 0)),
+        ("Web targets", _xesc(web_urls)),
+        ("Steps", f"{s.get('steps_done', 0)} done / {s.get('steps_failed', 0)} failed / "
+                  f"{s.get('steps_total', 0)} total"),
+        ("High / Medium", f"{s.get('high', 0)} / {s.get('medium', 0)}"),
+        ("Low / Info", f"{s.get('low', 0)} / {s.get('info', 0)}"),
+        ("Workflow ID", wf.get("id") or "-"),
+    ], styles))
+    if wf.get("error"):
+        story.append(Spacer(1, 4))
+        story.append(Paragraph(f'<font color="#ef4444"><b>Error:</b></font> {_xesc(wf["error"])}',
+                               styles['BodyText']))
+
+    steps = wf.get("steps", [])
+    story.append(Paragraph("Steps", styles['KSection']))
+    data = [[Paragraph(f"<b>{h}</b>", styles['BodyText']) for h in
+             ("#", "Tool", "Target", "Status", "Time", "Findings")]]
+    for st in steps:
+        sm = st.get("summary") or {}
+        data.append([Paragraph(str(st.get("index", 0) + 1), styles['BodyText']),
+                     Paragraph(st.get("tool", ""), styles['BodyText']),
+                     Paragraph(_xesc(st.get("target", "")), styles['BodyText']),
+                     Paragraph(st.get("status", ""), styles['BodyText']),
+                     Paragraph(f"{st.get('duration') or 0:.1f}s", styles['BodyText']),
+                     Paragraph(str(sm.get("total", 0)), styles['BodyText'])])
+    t = Table(data, colWidths=[10 * mm, 22 * mm, 66 * mm, 22 * mm, 18 * mm, 24 * mm], repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), BRAND_DARK),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#dbe2ee")),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f9fd")]),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4), ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(t)
+
+    for st in steps:
+        if not st.get("summary"):
+            continue
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(_xesc(f"Step {st['index'] + 1}: {st['tool']} — {st['target']}"), styles['KSection']))
+        story.append(Paragraph(f'<font face="{FONT_MONO}" size="8">{_xesc(st.get("command", ""))}</font>',
+                               styles['BodyText']))
+        if st.get("note"):
+            story.append(Paragraph(f'<font size="8" color="#55627d">{_xesc(st["note"])}</font>', styles['BodyText']))
+        _findings_section(story, styles, {"supported": True, "summary": st["summary"],
+                                          "ports": st.get("ports", []),
+                                          "findings": st.get("findings", [])},
+                          show_overview=False)
+
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    return buf.getvalue()
+
+
+@app.route("/api/workflows/<workflow_id>/report", methods=["GET"])
+def workflow_report(workflow_id):
+    """Download a PDF report for a recon workflow."""
+    if not REPORTLAB_AVAILABLE:
+        return jsonify({"error": "PDF support not installed. Run: pip install reportlab"}), 503
+    try:
+        wf = db.session.get(ReconWorkflow, workflow_id)
+        if not wf:
+            return jsonify({"error": "Workflow not found"}), 404
+        pdf_bytes = build_workflow_pdf(wf.to_dict(include_findings=True))
+        fname = _safe_filename(f"kali_recon_{wf.target}_{workflow_id[:8]}.pdf")
+        return send_file(_io.BytesIO(pdf_bytes), mimetype="application/pdf",
+                         as_attachment=True, download_name=fname)
+    except Exception as e:
+        logger.error(f"Error generating workflow report: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"Report error: {str(e)}"}), 500
+
+
+# ============================================================================
 # WebSocket Event Handlers - Real-Time Scan Streaming
 # ============================================================================
 
@@ -2209,6 +2823,33 @@ if SOCKETIO_AVAILABLE:
             except Exception as e:
                 logger.error(f"Error cancelling scan: {e}")
                 emit('cancel_error', {'scan_id': scan_id, 'error': str(e)}, room=scan_id)
+
+
+@app.route("/api/scans/active", methods=["GET"])
+def list_active_scans():
+    """Scans that are still running (no output lines) — lets a reloaded page re-attach."""
+    with _scan_registry_lock:
+        running = [e for e in scan_registry.values() if e.status in ("starting", "running")]
+    return jsonify({"success": True, "count": len(running),
+                    "scans": [e.snapshot(include_lines=False) for e in running]})
+
+
+@app.route("/api/scans/<scan_id>", methods=["GET"])
+def get_scan(scan_id):
+    """
+    Live state of a scan + its buffered output.
+
+    Query: since=<n>  return output lines from absolute index n (use the
+                      previous response's "next"), lines=0 to omit lines.
+    Works while the scan runs and for a while after it finishes; afterwards
+    use /api/history/<history_id>.
+    """
+    executor = scan_registry.get(scan_id)
+    if executor is None:
+        return jsonify({"error": "Scan not found (unknown or expired) — see /api/history"}), 404
+    since = request.args.get("since", 0, type=int)
+    include = request.args.get("lines", "1") not in ("0", "false", "no")
+    return jsonify(executor.snapshot(since=since, include_lines=include))
 
 
 @app.route("/api/scans/cancel/<scan_id>", methods=["POST"])

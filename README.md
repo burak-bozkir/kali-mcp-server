@@ -13,7 +13,9 @@ Kali MCP Server turns a set of command-line security tools (nmap, sqlmap, gobust
 ## ✨ Features
 
 - **Unified single-server architecture** — the backend serves the REST API, the WebSocket stream, and the dashboard UI from one origin (port `5001`).
-- **Real-time scan streaming** — live stdout/stderr in the browser over WebSockets, with a progress bar and a working **cancel** button that terminates the whole process group (not just the shell).
+- **Real-time scan streaming that survives long scans** — scans start asynchronously and their output is buffered on the server. The dashboard pulls it by offset, with WebSocket pushes for low latency, so a 30-minute gobuster run keeps streaming even if the socket drops or you reload the page. Gobuster shows a real % progress bar. A working **cancel** button kills the whole process group (not just the shell).
+- **Per-tool timeouts** — sensible defaults per tool (nmap 15 min, gobuster/nikto/sqlmap 30 min, hydra 1 h), overridable per scan from the UI/API/MCP or via `TIMEOUT_<TOOL>` env vars. A timeout keeps the partial output.
+- **Chained recon workflow** — one click (or one MCP call) runs nmap, detects every web port (http/https, 8080, 8443, ...) and follows up with gobuster and nikto automatically. You get live per-step progress, combined risk-rated findings and one PDF report for the whole run.
 - **Structured findings** — raw output from nmap / nikto / gobuster / dirb / sqlmap is parsed into open-ports tables and risk-rated findings (high / medium / low / info).
 - **Scan templates** — 8 built-in templates plus your own saved configurations, with one-click launch.
 - **PDF reports** — per-scan and summary reports with a branded layout, findings section, and full Unicode (Turkish) support.
@@ -58,7 +60,10 @@ Set via environment variables (see [`.env.example`](.env.example)):
 | `API_PORT` | `5001` | Server port |
 | `API_IP` | `127.0.0.1` | Bind address (`0.0.0.0` for LAN access) |
 | `DATABASE_PATH` | `scan_history.db` | SQLite scan-history database |
-| `COMMAND_TIMEOUT` | `180` | Per-command timeout in seconds |
+| `COMMAND_TIMEOUT` | `180` | Timeout for `/api/command` and tools without their own default |
+| `TIMEOUT_<TOOL>` | per tool | e.g. `TIMEOUT_GOBUSTER=3600` (defaults: nmap 900, gobuster/dirb/nikto/sqlmap 1800, wpscan 1200, enum4linux 600, hydra/john 3600, metasploit 900) |
+| `MAX_COMMAND_TIMEOUT` | `14400` | Upper limit for any requested timeout |
+| `MAX_CONCURRENT_WORKFLOWS` | `2` | Recon workflows allowed to run at the same time |
 | `TOOL_STATUS_CACHE_TTL` | `60` | Tool-availability cache lifetime (s) |
 | `CORS_ORIGINS` | `*` | Allowed CORS origins |
 | `SECRET_KEY` | *(dev key)* | Flask secret — **change in production** |
@@ -76,6 +81,7 @@ Set via environment variables (see [`.env.example`](.env.example)):
 │        └───────────┬─────────────────┘        │
 │         SQLite (per-tool scan history)        │
 │         findings.py (output → findings)       │
+│   recon.py + ReconRunner (nmap → web tools)   │
 └──────────────────────┬───────────────────────┘
                        │  runs
               Kali Linux tools (nmap, sqlmap, …)
@@ -92,6 +98,7 @@ kali-mcp-server/
 │   │   ├── kali_server.py      # Main unified server (run this)
 │   │   ├── mcp_server.py       # MCP integration for AI agents
 │   │   ├── findings.py         # Parses raw output → structured findings
+│   │   ├── recon.py            # Chained recon logic (web-port detection, commands)
 │   │   ├── migration.py        # DB schema migration helper
 │   │   └── static/             # Dashboard UI (HTML + local Socket.IO)
 │   └── tests/                  # Test suite
@@ -104,7 +111,7 @@ kali-mcp-server/
 
 ## 🤖 MCP Integration (Claude Desktop)
 
-`src/backend/mcp_server.py` is a stdio MCP server that exposes each tool as an MCP tool (`nmap_scan`, `sqlmap_scan`, `gobuster_scan`, `hydra_attack`, …). It does **not** run the tools itself — it forwards them over HTTP to the REST API (`kali_server.py`). Two processes cooperate:
+`src/backend/mcp_server.py` is a stdio MCP server that exposes each tool as an MCP tool (`nmap_scan`, `sqlmap_scan`, `gobuster_scan`, `hydra_attack`, …), plus the chained workflow tools `recon_workflow`, `recon_status` and `recon_cancel`. Every scan tool takes an optional `timeout`. If a scan outlasts one MCP request (~5 min), the tool returns `status: "running"` with a `scan_id` while the scan keeps going on Kali. The agent then calls `scan_status(scan_id, wait=…)` for the output and parsed findings, or `scan_cancel(scan_id)`. With `recon_workflow` an agent runs a full first-pass recon of a host in one call. It gets back a compact result (open ports, web targets, per-step status, top findings) instead of raw tool output. It does **not** run the tools itself — it forwards them over HTTP to the REST API (`kali_server.py`). Two processes cooperate:
 
 1. **On Kali** — run the API server, bound so the VM is reachable:
    ```bash
@@ -139,6 +146,7 @@ The suite is plain Python scripts (no pytest needed):
 ```bash
 python3 src/tests/quick_test.py       # fast environment & structure checks (no server)
 python3 src/tests/test_db_schema.py   # database model tests
+python3 src/tests/test_recon.py       # recon workflow logic (no server, no Kali tools)
 # then start the server and run the full suite (incl. live API checks):
 python3 src/tests/test_system.py
 ```
@@ -153,7 +161,7 @@ The project is feature-complete but built to grow. Planned next:
 - **Scheduled scans** — cron-style recurring scans with result diffing.
 - **Alerting** — notify on new high-risk findings (webhook / email / Discord).
 - **More parsers** — extend structured findings to Hydra, WPScan and Enum4linux.
-- **Chained recon workflows** — auto-pivot (nmap → gobuster/nikto on discovered web ports).
+- **Scope allowlist** — only allow scans (UI and MCP) against approved targets/CIDRs.
 
 ## ⚠️ Legal & Ethical Notice
 
