@@ -86,7 +86,7 @@ Set via environment variables (see [`.env.example`](.env.example)):
 ## 📁 Project Structure
 
 ```
-kalimcp/
+kali-mcp-server/
 ├── src/
 │   ├── backend/
 │   │   ├── kali_server.py      # Main unified server (run this)
@@ -102,9 +102,58 @@ kalimcp/
 └── LICENSE
 ```
 
-## 🤖 MCP Usage
+## 🤖 MCP Integration (Claude Desktop)
 
-`src/backend/mcp_server.py` exposes each tool as an MCP tool (e.g. `nmap_scan`, `sqlmap_scan`, `hydra_attack`). Point an MCP-capable client (such as Claude Desktop) at it and let the agent orchestrate scans against the running API server.
+`src/backend/mcp_server.py` is a stdio MCP server that exposes each tool as an MCP tool (`nmap_scan`, `sqlmap_scan`, `gobuster_scan`, `hydra_attack`, …). It does **not** run the tools itself — it forwards them over HTTP to the REST API (`kali_server.py`). Two processes cooperate:
+
+1. **On Kali** — run the API server, bound so the VM is reachable:
+   ```bash
+   python3 src/backend/kali_server.py --port 5001 --ip 0.0.0.0
+   ```
+2. **On your desktop** — your MCP client (Claude Desktop) launches `mcp_server.py` and points it at the Kali API with `--server`.
+
+**How Windows ↔ Kali VM connect:** when Claude Desktop runs on Windows and the tools live in a Kali VM, the MCP server process starts **on Windows** (via the config below) and reaches Kali over plain **HTTP** at the VM's IP on port 5001 — no SSH required. Give the VM a reachable address (VirtualBox *Bridged* or *Host-only* adapter), start the API with `--ip 0.0.0.0`, find the VM's IP with `ip a` on Kali, and use that IP in `--server`. (If you run everything on one machine, use `http://localhost:5001`.)
+
+Add this to `claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "kali": {
+      "command": "C:\\path\\to\\python.exe",
+      "args": [
+        "C:\\path\\to\\kali-mcp-server\\src\\backend\\mcp_server.py",
+        "--server", "http://192.168.1.50:5001"
+      ]
+    }
+  }
+}
+```
+
+Replace the **Python path**, the **repo path**, and the **Kali VM IP**. The Python you point to must have the MCP deps installed (`pip install mcp requests`). Restart Claude Desktop and the `kali` tools appear.
+
+## 🧪 Testing
+
+The suite is plain Python scripts (no pytest needed):
+
+```bash
+python3 src/tests/quick_test.py       # fast environment & structure checks (no server)
+python3 src/tests/test_db_schema.py   # database model tests
+# then start the server and run the full suite (incl. live API checks):
+python3 src/tests/test_system.py
+```
+
+Developed and tested on **Kali Linux (rolling)** with **Python 3.11+**.
+
+## 🗺️ Roadmap
+
+The project is feature-complete but built to grow. Planned next:
+
+- **User management & RBAC** — authentication and role-based access to scans and reports.
+- **Scheduled scans** — cron-style recurring scans with result diffing.
+- **Alerting** — notify on new high-risk findings (webhook / email / Discord).
+- **More parsers** — extend structured findings to Hydra, WPScan and Enum4linux.
+- **Chained recon workflows** — auto-pivot (nmap → gobuster/nikto on discovered web ports).
 
 ## ⚠️ Legal & Ethical Notice
 
