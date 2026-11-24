@@ -929,6 +929,10 @@ class CommandExecutor:
             # as nmap/sqlmap). Terminating just the shell leaves the tool running.
             popen_kwargs = dict(
                 shell=True,
+                # Nobody can type into a scan, so give it a closed stdin: a tool that
+                # still asks "[Y/n]?" gets EOF at once (and takes its default or
+                # exits) instead of waiting silently until the timeout.
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
