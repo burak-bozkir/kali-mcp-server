@@ -28,6 +28,8 @@ logger = logging.getLogger(__name__)
 # Default configuration
 DEFAULT_KALI_SERVER = os.environ.get("KALI_API_SERVER", "http://localhost:5001")  # change to your linux IP
 DEFAULT_REQUEST_TIMEOUT = 300  # 5 minutes default timeout for API requests
+# Expose the execute_command tool only when asked (the server must also allow it)
+DEFAULT_ENABLE_COMMAND = os.environ.get("KALI_ENABLE_COMMAND", "0").strip().lower() in ("1", "true", "yes", "y", "on")
 
 class KaliToolsClient:
     """Client for communicating with the Kali Linux Tools API Server"""
@@ -191,7 +193,7 @@ class KaliToolsClient:
         """
         return self.safe_get("health")
 
-def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
+def setup_mcp_server(kali_client: KaliToolsClient, enable_command: bool = False) -> FastMCP:
     """
     Set up the MCP server with all tool functions
     
@@ -594,6 +596,9 @@ def setup_mcp_server(kali_client: KaliToolsClient) -> FastMCP:
         """
         return kali_client.check_health()
     
+    if not enable_command:
+        return mcp
+
     @mcp.tool()
     def execute_command(command: str) -> Dict[str, Any]:
         """
@@ -616,6 +621,8 @@ def parse_args():
                       help=f"Kali API server URL (default: {DEFAULT_KALI_SERVER})")
     parser.add_argument("--timeout", type=int, default=DEFAULT_REQUEST_TIMEOUT,
                       help=f"Request timeout in seconds (default: {DEFAULT_REQUEST_TIMEOUT})")
+    parser.add_argument("--enable-command", action="store_true", default=DEFAULT_ENABLE_COMMAND,
+                      help="Expose the execute_command tool (server needs KALI_ENABLE_COMMAND=1 too)")
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     return parser.parse_args()
 
@@ -646,7 +653,7 @@ def main():
                 logger.warning(f"Missing tools: {', '.join(missing_tools)}")
     
     # Set up and run the MCP server
-    mcp = setup_mcp_server(kali_client)
+    mcp = setup_mcp_server(kali_client, enable_command=args.enable_command)
     logger.info("Starting Kali MCP server")
     mcp.run()
 

@@ -134,6 +134,8 @@ POST /api/tools/metasploit
 POST /api/command
 { "command": "whoami" }     // basic injection guard applied
 ```
+**Disabled by default** (returns `403`): it runs any shell command. Enable it with
+`KALI_ENABLE_COMMAND=1`.
 
 ### Live scan state & buffered output
 ```
@@ -245,7 +247,8 @@ GET  /api/workflows/<id>/report         # PDF report of the whole workflow
 ## Tools & Health
 
 ```
-GET /health                    # server status + per-tool availability
+GET /health                    # server status, per-tool availability,
+                               #   command_endpoint_enabled
 GET /api/tools/available       # tools grouped by category, with availability
 ```
 
@@ -338,6 +341,7 @@ workflow events **and** every step's `scan_started` / `scan_output` / `scan_comp
 
 ```json
 { "error": "Target parameter is required" }        // 400
+{ "error": "The generic command endpoint is disabled..." } // 403
 { "error": "Scan not found in history" }            // 404
 { "error": "workflow_id already exists" }           // 409
 { "error": "Aynı anda en fazla 2 recon akışı ..." } // 429
@@ -372,6 +376,8 @@ curl -OJ http://127.0.0.1:5001/api/workflows/<workflow-id>/report
 ## Notes
 
 - **No authentication** is implemented — run on a trusted network only.
+- CORS is off by default (REST and Socket.IO accept same-origin browsers only). Set
+  `CORS_ORIGINS="http://a,http://b"` to allow other origins.
 - Each tool has its own default timeout (see *Tool Execution*); `COMMAND_TIMEOUT` (180 s) only
   applies to `/api/command` and unknown tools. `MAX_COMMAND_TIMEOUT` (14400 s) caps any request.
 - For long scans prefer `"async": true` + `GET /api/scans/<id>`: a blocking HTTP request that stays
