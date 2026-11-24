@@ -147,6 +147,7 @@ The suite is plain Python scripts (no pytest needed):
 python3 src/tests/quick_test.py       # fast environment & structure checks (no server)
 python3 src/tests/test_db_schema.py   # database model tests
 python3 src/tests/test_recon.py       # recon workflow logic (no server, no Kali tools)
+python3 src/tests/test_shell_quoting.py  # URLs with ?/& reach the tools as one argument
 # then start the server and run the full suite (incl. live API checks):
 python3 src/tests/test_system.py
 ```

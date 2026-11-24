@@ -52,6 +52,9 @@ python3 src/tests/test_db_schema.py
 # recon workflow logic (web-port detection, validation, commands)
 python3 src/tests/test_recon.py
 
+# shell quoting of user values in tool commands (no server, nothing executed)
+python3 src/tests/test_shell_quoting.py
+
 # full system test (start the server first for the live checks)
 python3 src/tests/test_system.py
 ```

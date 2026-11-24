@@ -20,6 +20,7 @@ A pentest dashboard plus an MCP server that wrap Kali tools (nmap, gobuster, dir
 - Storage is SQLite with one table per tool (`<tool>_history`) plus `scan_templates`. The 8 built-in templates are seeded on first run and protected from edit and delete.
 - Long scans: each tool has its own default timeout (`TOOL_TIMEOUTS`, env `TIMEOUT_<TOOL>`); requests can pass `timeout`. Tool endpoints go through `run_tool()`. `"async": true` returns 202, and the output is buffered per scan (`scan_registry`) and read with `GET /api/scans/<id>?since=N`. The dashboard and the recon UI **pull** output by offset; WebSocket events only nudge a pull. Don't go back to WS-only streaming: missed events lost the output. MCP tools use `run_scan()` (async + bounded wait) and return a `scan_id` for `scan_status` when a scan outlasts the MCP request.
 - Socket.IO is forced to `async_mode="threading"` (real threads + blocking subprocess). The client uses default transports (polling first), because socket.io-client 4.7 has no fallback from websocket-only.
+- Because of `shell=True`, every single user value put into a tool command (url, target, wordlist, data, username, password...) goes through `shell_arg()` (`shlex.quote`). Otherwise a URL like `?id=1&cat=2` is cut at `&`. Free-form `additional_args` / nmap `scan_type` stay unquoted on purpose (they hold several flags).
 - Scans run via `CommandExecutor` with `shell=True` in a **new process group**. Cancel and timeout kill the whole group with `os.killpg`. Keep it that way, or the tool keeps running after "cancel".
 - PDFs come from ReportLab with a registered DejaVu font, so Turkish characters render. Without reportlab, the endpoints return 503.
 
@@ -37,6 +38,7 @@ The tests are plain scripts, not pytest:
 python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models
 python3 src/tests/test_recon.py       # recon workflow logic, no server
+python3 src/tests/test_shell_quoting.py  # user values (URLs with ?/&) quoted in tool commands
 python3 src/tests/test_system.py      # full suite; live checks need the server running
 ```
 For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` scripts on `PATH`. Start the server with `subprocess.Popen` inside the test process so it doesn't outlive the test.

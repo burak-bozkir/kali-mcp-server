@@ -8,6 +8,7 @@ import argparse
 import json
 import logging
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -1191,6 +1192,25 @@ def validate_command(command: str, max_length: int = 1000) -> bool:
     return True
 
 
+def shell_arg(value: Any) -> str:
+    """Quote ONE user-supplied value for the shell (tools run with shell=True).
+
+    A URL such as http://host/item.php?id=1&cat=2 contains characters the shell
+    interprets: "&" sends the command to the background and cuts the URL, "?"
+    and "*" are glob patterns. shlex.quote turns the value into one literal
+    argument. A single pair of quotes the user already typed around the value
+    is dropped first so it isn't quoted twice. Plain values (IPs, simple URLs,
+    paths) come back unchanged.
+
+    Only for single values (target, url, wordlist, data...). Free-form flag
+    strings such as additional_args are left as typed on purpose.
+    """
+    s = str(value).strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
+        s = s[1:-1]
+    return shlex.quote(s)
+
+
 # Cache for tool-availability checks (avoids running `which` 10x on every request)
 _tool_status_cache = {"data": None, "timestamp": 0.0}
 _tool_status_lock = threading.Lock()
@@ -1304,13 +1324,13 @@ def nmap():
         command = f"nmap {scan_type}"
         
         if ports:
-            command += f" -p {ports}"
-        
+            command += f" -p {shell_arg(ports)}"
+
         if additional_args:
             # Basic validation for additional args - more sophisticated validation would be better
             command += f" {additional_args}"
-        
-        command += f" {target}"
+
+        command += f" {shell_arg(target)}"
         
         return run_tool(params, command, "nmap", target, scan_id)
     except Exception as e:
@@ -1345,7 +1365,7 @@ def gobuster():
                 "error": f"Invalid mode: {mode}. Must be one of: dir, dns, fuzz, vhost"
             }), 400
         
-        command = f"gobuster {mode} -u {url} -w {wordlist}"
+        command = f"gobuster {mode} -u {shell_arg(url)} -w {shell_arg(wordlist)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -1374,7 +1394,7 @@ def dirb():
                 "error": "URL parameter is required"
             }), 400
         
-        command = f"dirb {url} {wordlist}"
+        command = f"dirb {shell_arg(url)} {shell_arg(wordlist)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -1402,7 +1422,7 @@ def nikto():
                 "error": "Target parameter is required"
             }), 400
         
-        command = f"nikto -h {target}"
+        command = f"nikto -h {shell_arg(target)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -1431,10 +1451,11 @@ def sqlmap():
                 "error": "URL parameter is required"
             }), 400
         
-        command = f"sqlmap -u {url} --batch"
-        
+        # The URL almost always carries a query string (?id=1&cat=2) -> must be quoted
+        command = f"sqlmap -u {shell_arg(url)} --batch"
+
         if data:
-            command += f" --data=\"{data}\""
+            command += f" --data={shell_arg(data)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -1517,19 +1538,19 @@ def hydra():
         command = f"hydra -t 4"
         
         if username:
-            command += f" -l {username}"
+            command += f" -l {shell_arg(username)}"
         elif username_file:
-            command += f" -L {username_file}"
-        
+            command += f" -L {shell_arg(username_file)}"
+
         if password:
-            command += f" -p {password}"
+            command += f" -p {shell_arg(password)}"
         elif password_file:
-            command += f" -P {password_file}"
-        
+            command += f" -P {shell_arg(password_file)}"
+
         if additional_args:
             command += f" {additional_args}"
-        
-        command += f" {target} {service}"
+
+        command += f" {shell_arg(target)} {shell_arg(service)}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
         return run_tool(params, command, "hydra", target, scan_id)
@@ -1559,15 +1580,15 @@ def john():
         command = f"john"
         
         if format_type:
-            command += f" --format={format_type}"
-        
+            command += f" --format={shell_arg(format_type)}"
+
         if wordlist:
-            command += f" --wordlist={wordlist}"
-        
+            command += f" --wordlist={shell_arg(wordlist)}"
+
         if additional_args:
             command += f" {additional_args}"
-        
-        command += f" {hash_file}"
+
+        command += f" {shell_arg(hash_file)}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
         return run_tool(params, command, "john", hash_file, scan_id)
@@ -1592,7 +1613,7 @@ def wpscan():
                 "error": "URL parameter is required"
             }), 400
         
-        command = f"wpscan --url {url}"
+        command = f"wpscan --url {shell_arg(url)}"
         
         if additional_args:
             command += f" {additional_args}"
@@ -1620,7 +1641,7 @@ def enum4linux():
                 "error": "Target parameter is required"
             }), 400
         
-        command = f"enum4linux {additional_args} {target}"
+        command = f"enum4linux {additional_args} {shell_arg(target)}"
         
         scan_id = params.get("scan_id", str(uuid.uuid4()))
         return run_tool(params, command, "enum4linux", target, scan_id)
