@@ -31,6 +31,8 @@
             --text-faint: #5f6c86;
             --shadow: 0 10px 30px rgba(0,0,0,0.35);
             --input-bg: rgba(255,255,255,0.04);
+            --option-bg: #141b2e;  /* dropdown list needs a solid colour */
+            color-scheme: dark;    /* native controls (dropdown, scrollbar) follow the theme */
         }
         :root[data-theme="light"] {
             --bg: #f3f5fb;
@@ -44,6 +46,8 @@
             --text-faint: #93a0b8;
             --shadow: 0 10px 30px rgba(20,35,63,0.08);
             --input-bg: #f7f9fd;
+            --option-bg: #ffffff;
+            color-scheme: light;
             --accent: #0891b2;
             --accent-2: #4f46e5;
         }
@@ -129,6 +133,9 @@
         textarea { font-family: var(--mono); font-size: 12.5px; resize: vertical; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
         select { cursor: pointer; }
+        /* The open list is drawn by the browser: a transparent --input-bg turns
+           it white there, and white --text on it was invisible in dark mode. */
+        select option, select optgroup { background: var(--option-bg); color: var(--text); }
         .hint { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
         .param-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
         .chip {
@@ -273,6 +280,13 @@
         .f-kpi { background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px; padding: 12px; text-align: center; }
         .f-kpi .n { font-size: 24px; font-weight: 700; }
         .f-kpi .l { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
+        /* Findings tab: the KPI tiles are filter buttons */
+        button.f-kpi { font-family: var(--font); color: var(--text); width: 100%; cursor: pointer; transition: .15s; }
+        button.f-kpi:hover { border-color: var(--border-strong); }
+        button.f-kpi.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
+        button.f-kpi.active .l { color: var(--text); }
+        .f-filter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin: -6px 0 14px; }
+        .f-filter button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; font-family: var(--font); padding: 0; }
         .f-title { font-size: 13px; font-weight: 700; color: var(--accent); margin: 16px 0 9px; }
         .f-title:first-child { margin-top: 0; }
         .ports-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -1114,24 +1128,53 @@
     }
 
     const SEV_LABEL = { high: 'YÜKSEK', medium: 'ORTA', low: 'DÜŞÜK', info: 'BİLGİ' };
+    // Findings-tab filter: null = everything, 'ports' = only the port table,
+    // 'high' / 'medium' / 'low' (low + info) = ports and findings of that risk.
+    let findingsData = null;
+    let findingsFilter = null;
+    const FILTER_LABEL = { ports: 'Açık Port', high: 'Yüksek', medium: 'Orta', low: 'Düşük/Bilgi' };
+    function sevMatches(sev, filter) {
+        return filter === 'low' ? (sev === 'low' || sev === 'info') : sev === filter;
+    }
+    function setFindingsFilter(key) {
+        findingsFilter = (findingsFilter === key) ? null : key;  // second click clears it
+        renderFindings(findingsData);
+    }
+
     function renderFindings(f) {
+        findingsData = f;
         const box = document.getElementById('findings');
         if (!f || f.supported === false) {
             box.innerHTML = `<div class="empty-state">Bu araç (${esc(f && f.tool || '')}) için otomatik ayrıştırma henüz yok.<br>Ham çıktıyı "📊 Ham Detay" sekmesinden görebilirsin.</div>`;
             return;
         }
         const s = f.summary || {};
+        const flt = findingsFilter;
+        const kpi = (key, n, label, color) =>
+            `<button type="button" class="f-kpi${flt === key ? ' active' : ''}" aria-pressed="${flt === key}"
+                title="${flt === key ? 'Filtreyi kaldır' : 'Sadece ' + label + ' göster'}" onclick="setFindingsFilter('${key}')">
+                <div class="n"${color ? ` style="color:var(${color})"` : ''}>${n}</div><div class="l">${label}</div></button>`;
         let html = `<div class="f-kpis">
-            <div class="f-kpi"><div class="n">${s.open_ports||0}</div><div class="l">Açık Port</div></div>
-            <div class="f-kpi"><div class="n" style="color:var(--err)">${s.high||0}</div><div class="l">Yüksek</div></div>
-            <div class="f-kpi"><div class="n" style="color:var(--warn)">${s.medium||0}</div><div class="l">Orta</div></div>
-            <div class="f-kpi"><div class="n" style="color:var(--ok)">${(s.low||0)+(s.info||0)}</div><div class="l">Düşük/Bilgi</div></div>
+            ${kpi('ports', s.open_ports||0, 'Açık Port', '')}
+            ${kpi('high', s.high||0, 'Yüksek', '--err')}
+            ${kpi('medium', s.medium||0, 'Orta', '--warn')}
+            ${kpi('low', (s.low||0)+(s.info||0), 'Düşük/Bilgi', '--ok')}
         </div>`;
+        if (flt) {
+            html += `<div class="f-filter">Filtre: <b>${FILTER_LABEL[flt]}</b>
+                <button type="button" onclick="setFindingsFilter(null)">✕ Tümünü göster</button></div>`;
+        }
 
-        if (f.ports && f.ports.length) {
+        const ports = (f.ports || []).filter(p => !flt || flt === 'ports' || sevMatches(p.risk, flt));
+        const order = { high:0, medium:1, low:2, info:3 };
+        const items = flt === 'ports' ? [] : [...(f.findings || [])]
+            .filter(it => !flt || sevMatches(it.severity, flt))
+            .sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9));
+
+        if (ports.length) {
             html += `<div class="f-title">📡 Açık Portlar & Servisler</div>
                 <table class="ports-table"><tr><th>Port</th><th>Servis</th><th>Sürüm</th><th>Risk</th></tr>`;
-            for (const p of f.ports) {
+            for (const p of ports) {
                 html += `<tr>
                     <td class="p">${esc(p.port)}/${esc(p.proto)}</td>
                     <td>${esc(p.service||'')}</td>
@@ -1142,11 +1185,9 @@
             html += `</table>`;
         }
 
-        if (f.findings && f.findings.length) {
-            const order = { high:0, medium:1, low:2, info:3 };
-            const sorted = [...f.findings].sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9));
+        if (items.length) {
             html += `<div class="f-title">⚠️ Öne Çıkan Bulgular</div>`;
-            for (const it of sorted) {
+            for (const it of items) {
                 html += `<div class="finding ${it.severity}">
                     <div class="fdot"></div>
                     <div><div class="ft">${esc(it.title)}</div>${it.detail?`<div class="fd">${esc(it.detail)}</div>`:''}</div>
@@ -1154,8 +1195,10 @@
                 </div>`;
             }
         }
-        if ((!f.ports || !f.ports.length) && (!f.findings || !f.findings.length)) {
-            html += `<div class="empty-state">Bu taramada öne çıkan bir bulgu tespit edilmedi.</div>`;
+        if (!ports.length && !items.length) {
+            html += flt
+                ? `<div class="empty-state">Bu taramada "${FILTER_LABEL[flt]}" kategorisinde kayıt yok.</div>`
+                : `<div class="empty-state">Bu taramada öne çıkan bir bulgu tespit edilmedi.</div>`;
         }
         box.innerHTML = html;
     }
@@ -1165,6 +1208,7 @@
         loadHistory();
         // Load parsed findings and show that tab by default when useful
         fetch(`${API}/api/history/${id}/findings`).then(r => r.json()).then(f => {
+            findingsFilter = null;  // a new scan starts unfiltered
             renderFindings(f);
             switchTab(f && f.supported !== false ? 'findings' : 'detail');
         }).catch(() => switchTab('detail'));
