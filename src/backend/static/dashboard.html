@@ -174,9 +174,9 @@
         @keyframes indet { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
 
         /* Tabs */
-        .tabs { display: flex; gap: 6px; }
+        .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
         .tab {
-            font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: 9px; cursor: pointer;
+            font-size: 12.5px; font-weight: 600; padding: 7px 14px; border-radius: 9px; cursor: pointer; white-space: nowrap;
             color: var(--text-dim); border: 1px solid transparent; transition: .15s;
         }
         .tab.active { background: var(--surface-2); color: var(--accent); border-color: var(--border); }
@@ -280,32 +280,41 @@
         .f-kpi { background: var(--surface-2); border: 1px solid var(--border); border-radius: 11px; padding: 12px; text-align: center; }
         .f-kpi .n { font-size: 24px; font-weight: 700; }
         .f-kpi .l { font-size: 10.5px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .03em; margin-top: 2px; }
-        /* Findings tab: the KPI tiles are filter buttons */
-        button.f-kpi { font-family: var(--font); color: var(--text); width: 100%; cursor: pointer; transition: .15s; }
-        button.f-kpi:hover { border-color: var(--border-strong); }
-        button.f-kpi.active { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,0.15); }
-        button.f-kpi.active .l { color: var(--text); }
-        .f-filter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); margin: -6px 0 14px; }
-        .f-filter button { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 12px; font-family: var(--font); padding: 0; }
+        /* Findings tab: category filter chips */
+        .fchips { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
+        .fchip { font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-dim); cursor: pointer; font-family: var(--font); transition: .15s; }
+        .fchip:hover { border-color: var(--border-strong); }
+        .fchip b { color: var(--text); margin-left: 4px; }
+        .fchip .d { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .fchip.on { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
+        /* Finding rows: risk stripe on the left, click to open the detail */
+        .frow { border: 1px solid var(--border); border-left: 3px solid var(--text-faint); border-radius: 0 10px 10px 0; background: var(--surface-2); padding: 11px 13px; margin-bottom: 8px; }
+        .frow.high { border-left-color: var(--err); } .frow.medium { border-left-color: var(--warn); }
+        .frow.low { border-left-color: var(--ok); } .frow.info { border-left-color: var(--accent); }
+        .frow.has-more { cursor: pointer; }
+        .frow .top { display: flex; align-items: center; gap: 9px; }
+        .frow .t { font-weight: 600; font-size: 13px; word-break: break-word; }
+        .frow .src { font-family: var(--mono); font-size: 11px; color: var(--text-faint); white-space: nowrap; }
+        .frow .sp { flex: 1; }
+        .frow .chev { color: var(--text-faint); font-size: 10px; transition: .15s; }
+        .frow.open .chev { transform: rotate(180deg); }
+        .frow .more { display: none; margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--border); font-size: 12px; color: var(--text-dim); line-height: 1.55; word-break: break-word; }
+        .frow.open .more { display: block; }
+        /* Open ports as cards */
+        .pcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+        .pcard { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 10px 12px; min-width: 0; }
+        .pcard .ph { display: flex; align-items: center; gap: 6px; }
+        .pcard .pp { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 13px; }
+        .pcard .ps { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pcard .sev { margin-left: auto; }
+        .pcard .pv { font-family: var(--mono); font-size: 11px; color: var(--text-dim); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .f-title { font-size: 13px; font-weight: 700; color: var(--accent); margin: 16px 0 9px; }
         .f-title:first-child { margin-top: 0; }
-        .ports-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-        .ports-table th { text-align: left; color: var(--text-faint); font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; padding: 7px 9px; border-bottom: 1px solid var(--border); }
-        .ports-table td { padding: 9px; border-bottom: 1px solid var(--border); }
-        .ports-table .p { font-family: var(--mono); font-weight: 700; color: var(--accent); }
-        .ports-table .vmono { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); }
         .sev { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
         .sev.high { background: rgba(239,68,68,.15); color: var(--err); }
         .sev.medium { background: rgba(245,158,11,.15); color: var(--warn); }
         .sev.low { background: rgba(34,197,94,.14); color: var(--ok); }
         .sev.info { background: rgba(34,211,238,.12); color: var(--accent); }
-        .finding { display: flex; gap: 11px; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); margin-bottom: 8px; align-items: flex-start; }
-        .finding .fdot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex-shrink: 0; }
-        .finding.high .fdot { background: var(--err); } .finding.medium .fdot { background: var(--warn); }
-        .finding.low .fdot { background: var(--ok); } .finding.info .fdot { background: var(--accent); }
-        .finding .ft { font-weight: 600; font-size: 13px; }
-        .finding .fd { font-size: 11.5px; color: var(--text-dim); margin-top: 2px; word-break: break-word; }
-        .finding .fright { margin-left: auto; }
 
         /* Recon workflow */
         .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
@@ -325,17 +334,69 @@
         .wst.cancelled { background: rgba(245,158,11,.15); color: var(--warn); }
         .web-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
         .web-chips .chip { cursor: default; }
-        .steps { display: flex; flex-direction: column; gap: 7px; }
-        .step { display: grid; grid-template-columns: 26px 78px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
-        .step.click { cursor: pointer; } .step.click:hover { border-color: var(--border-strong); }
-        .step.running { border-color: var(--accent); }
-        .step .si { font-family: var(--mono); font-size: 11px; color: var(--text-faint); text-align: center; }
-        .step .stool { font-weight: 700; font-size: 12.5px; text-transform: capitalize; }
-        .step .starget { font-family: var(--mono); font-size: 11.5px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .step .snote { font-size: 11px; color: var(--text-faint); grid-column: 2 / -1; margin-top: -4px; }
-        .step .sright { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-faint); white-space: nowrap; }
-        .finding .ftool { font-family: var(--mono); font-size: 10px; color: var(--text-faint); margin-left: 6px; font-weight: 500; }
+        /* Workflow steps as cards + overall progress bar */
+        .rflow { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+        .rstep { border: 1px solid var(--border); border-radius: 11px; background: var(--surface-2); padding: 11px 12px; min-width: 0; }
+        .rstep.click { cursor: pointer; } .rstep.click:hover { border-color: var(--border-strong); }
+        .rstep.done { border-color: rgba(34,197,94,.45); }
+        .rstep.running { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,211,238,.12); }
+        .rstep.failed { border-color: rgba(239,68,68,.5); }
+        .rstep.skipped, .rstep.cancelled, .rstep.pending { opacity: .65; }
+        .rstep .rn { display: flex; justify-content: space-between; gap: 6px; font-size: 10.5px; color: var(--text-faint); font-family: var(--mono); }
+        .rstep .rt { font-weight: 700; font-size: 13px; margin: 4px 0 2px; text-transform: capitalize; }
+        .rstep .rg { font-family: var(--mono); font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .rstep .rm { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+        .rbar { height: 5px; border-radius: 5px; background: var(--surface-2); margin: 14px 0 6px; overflow: hidden; }
+        .rbar div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .3s; }
         .wf-list .hist .cmd { white-space: normal; }
+
+        /* Middle card: scan context bar */
+        .ctx { display: none; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+        .ctx.show { display: flex; }
+        .ctx .crow { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+        .ctx .ctool { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); }
+        .ctx .ctgt { font-family: var(--mono); font-size: 14px; font-weight: 700; word-break: break-all; }
+        .ctx .cmeta { font-size: 12px; color: var(--text-faint); margin-top: 5px; }
+        .ctx .sp { flex: 1; }
+        .badge.run { background: rgba(34,211,238,.14); color: var(--accent); }
+        .badge.warn { background: rgba(245,158,11,.15); color: var(--warn); }
+        /* Tab counters and the "scan running" dot */
+        .tab .cnt { font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); color: var(--text-dim); margin-left: 5px; }
+        .tab .cnt:empty { display: none; }
+        .tab.active .cnt { color: var(--accent); border-color: var(--border-strong); }
+        .tab .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--text-faint); margin-right: 6px; vertical-align: 1px; }
+        .tab .live-dot.on { background: var(--ok); animation: pulse 1.4s infinite; }
+        @keyframes pulse { 50% { opacity: .35; } }
+        /* Live console toolbar */
+        .ctoolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+        .ctoolbar .info { font-size: 12px; color: var(--text-dim); }
+        .ctoolbar .sp { flex: 1; }
+        .ctoolbar input { width: 170px; padding: 7px 10px; font-size: 12px; }
+        .mini-btn { font-size: 12px; font-weight: 600; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); cursor: pointer; white-space: nowrap; font-family: var(--font); display: inline-flex; align-items: center; gap: 6px; }
+        .mini-btn:hover { border-color: var(--border-strong); }
+        .mini-btn.on { border-color: var(--accent); color: var(--accent); }
+        .mini-btn.danger { color: var(--err); }
+        .console .ts { color: #5f6c86; margin-right: 10px; user-select: none; }
+        .console .line.hide { display: none; }
+        /* Raw detail: key/value grid */
+        .kvgrid { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px 14px; font-size: 13px; align-items: center; }
+        .kvgrid .k { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+        .kvgrid .v { word-break: break-word; }
+        .kvgrid .mono { font-family: var(--mono); font-size: 12px; }
+        /* Chained recon as the first template card */
+        .tpl.flow { border-color: rgba(99,102,241,.55); background: linear-gradient(180deg, rgba(99,102,241,.10), transparent 70%), var(--surface-2); }
+        .tpl .ttool.flow { background: rgba(99,102,241,.18); color: #a5b4fc; }
+        :root[data-theme="light"] .tpl .ttool.flow { color: #4f46e5; }
+        /* Recon form: one box per step, each with its own parameters */
+        .rcfg { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 10px 11px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 7px; transition: .15s; }
+        .rcfg.off { opacity: .45; }
+        .rcfg .rh { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .rcfg .rno { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; font-family: var(--mono); background: rgba(34,211,238,.14); color: var(--accent); flex-shrink: 0; }
+        .rcfg .rchk { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--text); cursor: pointer; }
+        .rcfg .rchk input { width: auto; accent-color: var(--accent); }
+        .rcfg .rd { font-size: 11px; color: var(--text-faint); margin-left: auto; text-align: right; }
+        .rcfg input[type=text] { font-family: var(--mono); font-size: 12px; padding: 8px 10px; }
+        .icon-btn svg { display: block; }
 
         @media (max-width: 1200px) { .grid { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2,1fr); } }
         @media (max-width: 560px) { .stats { grid-template-columns: 1fr; } .wrap { padding: 14px; } .f-kpis { grid-template-columns: repeat(2,1fr); } }
@@ -346,7 +407,7 @@
         <!-- Top bar -->
         <div class="topbar">
             <div class="brand">
-                <div class="logo">🛡️</div>
+                <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
                 <div>
                     <h1>Kali MCP Server</h1>
                     <div class="sub">Interactive Penetration Testing Dashboard</div>
@@ -354,7 +415,7 @@
             </div>
             <div class="topbar-spacer"></div>
             <div class="health" id="health"><span class="dot"></span><span id="health-text">Bağlanıyor…</span></div>
-            <button class="icon-btn" id="theme-btn" title="Tema değiştir" onclick="toggleTheme()">🌙</button>
+            <button class="icon-btn" id="theme-btn" title="Tema değiştir" onclick="toggleTheme()"></button>
         </div>
 
         <!-- Stats -->
@@ -368,8 +429,8 @@
         <!-- Templates -->
         <div class="card" style="margin-bottom:20px">
             <div class="card-head">
-                <h2>⚡ Tarama Şablonları</h2>
-                <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Yenile" onclick="loadTemplates()">↻</button>
+                <h2>Tarama Şablonları</h2>
+                <button class="icon-btn" style="width:34px;height:34px" title="Yenile" onclick="loadTemplates()" data-icon="refresh"></button>
             </div>
             <div class="card-body">
                 <div class="tpl-scroll" id="templates"><div class="empty-state">Yükleniyor…</div></div>
@@ -380,7 +441,7 @@
         <div class="grid">
             <!-- Scan form -->
             <div class="card">
-                <div class="card-head"><h2>🎯 Yeni Tarama</h2></div>
+                <div class="card-head"><h2>Yeni Tarama</h2></div>
                 <div class="card-body">
                     <div class="field">
                         <label>Hedef (IP / domain)</label>
@@ -399,23 +460,32 @@
                             <option value="hydra">Hydra — Brute Force</option>
                             <option value="john">John — Parola Kırma</option>
                             <option value="wpscan">WPScan — WordPress</option>
-                            <option disabled>──────────</option>
-                            <option value="recon">🔗 Zincirleme Recon — nmap → gobuster/nikto</option>
+                            <!-- Not in the list: chosen from the "Zincirleme Recon" template card -->
+                            <option value="recon" hidden>Zincirleme Recon — nmap → gobuster/nikto</option>
                         </select>
                     </div>
                     <div class="field" id="recon-field" style="display:none">
-                        <label>Web portlarında çalışacak araçlar</label>
-                        <div class="checks">
-                            <label><input type="checkbox" id="rc-gobuster" checked> Gobuster (dizin keşfi)</label>
-                            <label><input type="checkbox" id="rc-nikto" checked> Nikto (web zafiyet)</label>
+                        <label>Akış adımları</label>
+                        <div class="rcfg">
+                            <div class="rh"><span class="rno">1</span><b>Nmap</b><span class="rd">her zaman çalışır</span></div>
+                            <input type="text" id="rc-nmap-args" value="-T4 -Pn" placeholder="Ek parametre (varsayılan: -T4 -Pn)" autocomplete="off">
+                        </div>
+                        <div class="rcfg">
+                            <div class="rh"><span class="rno">2</span><label class="rchk"><input type="checkbox" id="rc-gobuster" checked onchange="onReconStepToggle(this)"> <b>Gobuster</b></label><span class="rd">dizin keşfi</span></div>
+                            <input type="text" id="rc-gobuster-args" placeholder="Ek parametre (varsayılan: -t 30)" autocomplete="off">
+                            <input type="text" id="rc-wordlist" placeholder="Wordlist (varsayılan: dirb/common.txt)" autocomplete="off">
+                        </div>
+                        <div class="rcfg">
+                            <div class="rh"><span class="rno">3</span><label class="rchk"><input type="checkbox" id="rc-nikto" checked onchange="onReconStepToggle(this)"> <b>Nikto</b></label><span class="rd">web zafiyet</span></div>
+                            <input type="text" id="rc-nikto-args" placeholder="Ek parametre (varsayılan: yok)" autocomplete="off">
                         </div>
                         <div class="row2">
                             <div><label>Maks. web hedefi</label><input type="number" id="rc-max" min="1" max="20" value="5"></div>
-                            <div><label>Adım zaman aşımı (sn)</label><input type="number" id="rc-timeout" min="10" max="14400" placeholder="Boş = araç varsayılanı"></div>
+                            <div><label>Adım zaman aşımı (sn)</label><input type="number" id="rc-timeout" min="10" max="14400" placeholder="Varsayılan"></div>
                         </div>
-                        <div class="hint">Önce nmap -sV çalışır; bulunan her http/https portuna seçilen araçlar otomatik uygulanır. Hedef tek bir host olmalı (CIDR/URL değil).</div>
+                        <div class="hint">Gobuster ve Nikto, Nmap'in bulduğu her http/https portunda çalışır. Hedef tek bir host olmalı (CIDR/URL değil).</div>
                     </div>
-                    <div class="field">
+                    <div class="field" id="params-field">
                         <label>Ek Parametreler <span id="param-help" style="color:var(--text-faint);font-weight:400"></span></label>
                         <textarea id="params" rows="2" placeholder="Opsiyonel"></textarea>
                         <div class="param-chips" id="chips"></div>
@@ -428,9 +498,9 @@
                         <label>Özel Wordlist (opsiyonel)</label>
                         <input type="text" id="wordlist" placeholder="/usr/share/wordlists/dirb/common.txt">
                     </div>
-                    <button class="btn btn-primary" id="run-btn" onclick="runScan()"><span id="run-label">▶ Taramayı Başlat</span></button>
-                    <button class="btn btn-danger" id="cancel-btn" style="display:none;margin-top:10px" onclick="cancelScan()">⊗ Taramayı İptal Et</button>
-                    <button class="tbtn" style="width:100%;margin-top:10px;padding:11px;border-radius:11px" onclick="openSaveTemplate()">💾 Şablon Olarak Kaydet</button>
+                    <button class="btn btn-primary" id="run-btn" onclick="runScan()"><span id="run-label">Taramayı Başlat</span></button>
+                    <button class="btn btn-danger" id="cancel-btn" style="display:none;margin-top:10px" onclick="cancelScan()">Taramayı İptal Et</button>
+                    <button class="tbtn" id="save-tpl-btn" style="width:100%;margin-top:10px;padding:11px;border-radius:11px" onclick="openSaveTemplate()">Şablon Olarak Kaydet</button>
                     <div class="status" id="status"></div>
                     <div class="progress" id="progress"><div class="fill" id="progress-fill"></div></div>
                 </div>
@@ -438,17 +508,34 @@
 
             <!-- Live output / details -->
             <div class="card">
+                <!-- Which scan the panel is showing: filled by setCtx() -->
+                <div class="ctx" id="scan-ctx">
+                    <div>
+                        <div class="crow"><span class="ctool" id="ctx-tool"></span><span class="ctgt" id="ctx-target"></span><span class="badge" id="ctx-status"></span></div>
+                        <div class="cmeta" id="ctx-meta"></div>
+                    </div>
+                    <span class="sp"></span>
+                    <button class="btn-sm primary" id="ctx-report" style="display:none">PDF Rapor</button>
+                </div>
                 <div class="card-head">
                     <div class="tabs">
-                        <div class="tab active" data-tab="live" onclick="switchTab('live')">🔴 Canlı Çıktı</div>
-                        <div class="tab" data-tab="findings" onclick="switchTab('findings')">🎯 Bulgular</div>
-                        <div class="tab" data-tab="detail" onclick="switchTab('detail')">📊 Ham Detay</div>
-                        <div class="tab" data-tab="recon" onclick="switchTab('recon')">🔗 Recon Akışı</div>
+                        <div class="tab active" data-tab="live" onclick="switchTab('live')"><span class="live-dot" id="live-dot"></span>Canlı Çıktı</div>
+                        <div class="tab" data-tab="findings" onclick="switchTab('findings')">Bulgular<span class="cnt" id="cnt-findings"></span></div>
+                        <div class="tab" data-tab="detail" onclick="switchTab('detail')">Ham Detay</div>
+                        <div class="tab" data-tab="recon" onclick="switchTab('recon')">Recon Akışı<span class="cnt" id="cnt-recon"></span></div>
                     </div>
-                    <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Konsolu temizle" onclick="clearConsole()">🗑️</button>
+                    <button class="icon-btn" style="width:34px;height:34px" title="Konsolu temizle" onclick="clearConsole()" data-icon="trash"></button>
                 </div>
                 <div class="card-body">
                     <div class="tab-panel active" id="panel-live">
+                        <div class="ctoolbar">
+                            <span class="info" id="live-info">Bekleniyor</span>
+                            <span class="sp"></span>
+                            <input type="text" id="console-search" placeholder="Çıktıda ara…" oninput="filterConsole()" autocomplete="off">
+                            <button class="mini-btn on" id="autoscroll-btn" onclick="toggleAutoScroll()" title="Yeni satır gelince en alta kaydır">Otomatik kaydır</button>
+                            <button class="mini-btn" onclick="copyConsole(this)">Kopyala</button>
+                            <button class="mini-btn danger" id="live-stop" style="display:none" onclick="cancelScan()">Durdur</button>
+                        </div>
                         <div class="console" id="console"><span class="empty">Tarama başlatıldığında canlı çıktı burada akacak…</span></div>
                     </div>
                     <div class="tab-panel" id="panel-findings">
@@ -458,8 +545,8 @@
                         <div id="detail"><div class="empty-state">Detayları görmek için geçmişten bir tarama seçin.</div></div>
                     </div>
                     <div class="tab-panel" id="panel-recon">
-                        <div id="recon-view"><div class="empty-state">Araç listesinden "🔗 Zincirleme Recon" seçip başlatın veya aşağıdan geçmiş bir akışı açın.</div></div>
-                        <div class="f-title" style="margin-top:20px">🕘 Son Recon Akışları</div>
+                        <div id="recon-view"><div class="empty-state">Tarama Şablonları'ndan "Zincirleme Recon" kartını seçip başlatın veya aşağıdan geçmiş bir akışı açın.</div></div>
+                        <div class="f-title" style="margin-top:20px">Son Recon Akışları</div>
                         <div class="list wf-list" id="recon-list" style="max-height:260px"><div class="empty-state">Henüz akış yok</div></div>
                     </div>
                 </div>
@@ -468,10 +555,10 @@
             <!-- History -->
             <div class="card">
                 <div class="card-head">
-                    <h2>📋 Tarama Geçmişi</h2>
+                    <h2>Tarama Geçmişi</h2>
                     <div style="display:flex;gap:6px">
-                        <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Özet PDF raporu" onclick="downloadSummary()">📄</button>
-                        <button class="icon-btn" style="width:34px;height:34px;font-size:14px" title="Yenile" onclick="loadHistory()">↻</button>
+                        <button class="icon-btn" style="width:34px;height:34px" title="Özet PDF raporu" onclick="downloadSummary()" data-icon="file"></button>
+                        <button class="icon-btn" style="width:34px;height:34px" title="Yenile" onclick="loadHistory()" data-icon="refresh"></button>
                     </div>
                 </div>
                 <div class="card-body">
@@ -482,7 +569,7 @@
 
         <!-- Tools status -->
         <div class="card tools-strip">
-            <div class="card-head"><h2>🧰 Araç Durumu</h2><span class="hint" id="tools-updated"></span></div>
+            <div class="card-head"><h2>Araç Durumu</h2><span class="hint" id="tools-updated"></span></div>
             <div class="card-body"><div class="tools-grid" id="tools-grid"><div class="empty-state">Yükleniyor…</div></div></div>
         </div>
     </div>
@@ -491,7 +578,7 @@
     <!-- Save template modal -->
     <div class="modal-overlay" id="tpl-modal">
         <div class="modal">
-            <div class="modal-head">💾 Şablon Olarak Kaydet</div>
+            <div class="modal-head">Şablon Olarak Kaydet</div>
             <div class="modal-body">
                 <div class="field"><label>Şablon Adı</label><input type="text" id="tpl-name" placeholder="Örn: Hızlı Web Taraması"></div>
                 <div class="field"><label>Açıklama (opsiyonel)</label><input type="text" id="tpl-desc" placeholder="Bu şablon ne yapar?"></div>
@@ -523,8 +610,7 @@
         metasploit: 'LHOST=... LPORT=...',
         hydra: '-t 4 -f  (service: ssh)',
         john: '--format=raw-md5',
-        wpscan: '--enumerate vp',
-        recon: 'nmap ek parametreleri (varsayılan: -T4 -Pn)'
+        wpscan: '--enumerate vp'
     };
     const CHIPS = {
         nmap: [['-sV','sürüm'],['-sC','script'],['-A','agresif'],['-p 1-1000','port'],['-O','OS'],['-T4','hız']],
@@ -536,8 +622,7 @@
         metasploit: [['LHOST=','listener IP'],['LPORT=4444','port']],
         hydra: [['-t 4','görev'],['-f','ilkte dur']],
         john: [['--format=raw-md5','format'],['--rules','kurallar']],
-        wpscan: [['--enumerate vp','pluginler'],['--random-user-agent','UA']],
-        recon: [['-T4','hız'],['-Pn','ping yok'],['--top-ports 1000','top port'],['--open','sadece açık']]
+        wpscan: [['--enumerate vp','pluginler'],['--random-user-agent','UA']]
     };
     // Which tools use the target as a URL vs raw target
     function buildBody(tool, target, params, wordlist, scanId) {
@@ -562,10 +647,22 @@
         return b;
     }
 
+    // ---------- Line icons (instead of emoji) ----------
+    const svgIcon = d => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+    const ICON = {
+        refresh: svgIcon('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>'),
+        trash: svgIcon('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
+        file: svgIcon('<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M12 11v6M9 14l3 3 3-3"/>'),
+        moon: svgIcon('<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z"/>'),
+        sun: svgIcon('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+        copy: svgIcon('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/>'),
+    };
+    document.querySelectorAll('[data-icon]').forEach(b => { b.innerHTML = ICON[b.dataset.icon] || ''; });
+
     // ---------- Theme ----------
     function applyTheme(t) {
         document.documentElement.setAttribute('data-theme', t);
-        document.getElementById('theme-btn').textContent = t === 'dark' ? '🌙' : '☀️';
+        document.getElementById('theme-btn').innerHTML = t === 'dark' ? ICON.moon : ICON.sun;
         try { localStorage.setItem('kmcp-theme', t); } catch(e){}
     }
     function toggleTheme() {
@@ -585,13 +682,15 @@
         const chips = document.getElementById('chips');
         chips.innerHTML = (CHIPS[tool] || []).map(c =>
             `<span class="chip" onclick="addParam('${c[0].replace(/'/g,"\\'")}')"><b>${c[0]}</b> ${c[1]}</span>`).join('');
-        // Wordlist only relevant for a few tools
-        const usesWordlist = ['gobuster','dirb','john','recon'].includes(tool);
+        // Wordlist only relevant for a few tools. In recon mode every step has
+        // its own parameter (and gobuster its own wordlist) inside #recon-field.
+        const recon = tool === 'recon';
+        const usesWordlist = ['gobuster','dirb','john'].includes(tool);
         document.getElementById('wordlist-field').style.display = usesWordlist ? 'block' : 'none';
-        document.getElementById('recon-field').style.display = tool === 'recon' ? 'block' : 'none';
-        document.getElementById('timeout-field').style.display = tool === 'recon' ? 'none' : 'block';
+        document.getElementById('recon-field').style.display = recon ? 'block' : 'none';
+        document.getElementById('params-field').style.display = recon ? 'none' : 'block';
+        document.getElementById('timeout-field').style.display = recon ? 'none' : 'block';
         updateTimeoutHelp();
-        document.getElementById('params').placeholder = tool === 'recon' ? '-T4 -Pn' : 'Opsiyonel';
         // Target placeholder
         const ph = { nmap:'192.168.1.10', gobuster:'example.com', dirb:'example.com', nikto:'example.com',
             sqlmap:'http://example.com/page?id=1', enum4linux:'192.168.1.10', metasploit:'exploit/windows/smb/ms17_010',
@@ -605,6 +704,12 @@
         const t = TOOL_TIMEOUTS[tool] || TOOL_TIMEOUTS['default'];
         document.getElementById('timeout-help').textContent = t ? `— varsayılan ${Math.round(t / 60)} dk` : '';
     }
+    // Recon form: an unticked step is dimmed and its inputs are disabled
+    function onReconStepToggle(cb) {
+        const box = cb.closest('.rcfg');
+        box.classList.toggle('off', !cb.checked);
+        box.querySelectorAll('input[type=text]').forEach(i => { i.disabled = !cb.checked; });
+    }
     function addParam(txt) {
         const el = document.getElementById('params');
         el.value = (el.value.trim() + ' ' + txt).trim();
@@ -617,16 +722,91 @@
     }
     function hideStatus() { document.getElementById('status').className = 'status'; }
     function consoleEl() { return document.getElementById('console'); }
-    function clearConsole() { consoleEl().innerHTML = '<span class="empty">Konsol temizlendi.</span>'; }
+    let lineCount = 0, autoScroll = true;
+    function clearConsole() {
+        consoleEl().innerHTML = '<span class="empty">Konsol temizlendi.</span>';
+        lineCount = 0; setLiveInfo();
+    }
+    // Each line gets the local time it arrived; the search box hides non-matching lines.
     function appendLine(text, cls='') {
         const c = consoleEl();
         const first = c.querySelector('.empty');
         if (first) c.innerHTML = '';
         const line = document.createElement('span');
         line.className = 'line ' + cls;
-        line.textContent = text;
+        const ts = document.createElement('span');
+        ts.className = 'ts';
+        ts.textContent = new Date().toLocaleTimeString('tr-TR');
+        const tx = document.createElement('span');
+        tx.className = 'tx';
+        tx.textContent = text;
+        line.append(ts, tx);
+        const q = document.getElementById('console-search').value.trim().toLowerCase();
+        if (q && !text.toLowerCase().includes(q)) line.classList.add('hide');
         c.appendChild(line);
-        c.scrollTop = c.scrollHeight;
+        lineCount++; setLiveInfo();
+        if (autoScroll) c.scrollTop = c.scrollHeight;
+    }
+    let liveElapsed = '';
+    function setLiveInfo(elapsed) {
+        if (elapsed !== undefined) liveElapsed = elapsed;
+        document.getElementById('live-info').textContent =
+            lineCount ? `${lineCount} satır${liveElapsed ? ' · ' + liveElapsed : ''}` : 'Bekleniyor';
+    }
+    function filterConsole() {
+        const q = document.getElementById('console-search').value.trim().toLowerCase();
+        consoleEl().querySelectorAll('.line').forEach(l => {
+            const tx = l.querySelector('.tx');
+            l.classList.toggle('hide', !!q && !(tx ? tx.textContent : l.textContent).toLowerCase().includes(q));
+        });
+    }
+    function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        document.getElementById('autoscroll-btn').classList.toggle('on', autoScroll);
+        if (autoScroll) consoleEl().scrollTop = consoleEl().scrollHeight;
+    }
+    function copyText(text, btn) {
+        const done = () => { if (!btn) return; const o = btn.innerHTML; btn.textContent = 'Kopyalandı'; setTimeout(() => { btn.innerHTML = o; }, 1200); };
+        // navigator.clipboard only exists on https/localhost; http://<vm-ip> needs the textarea fallback
+        if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(text).then(done).catch(() => {}); return; }
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        ta.remove();
+    }
+    function copyConsole(btn) {
+        const lines = [...consoleEl().querySelectorAll('.line .tx')].map(l => l.textContent);
+        if (lines.length) copyText(lines.join('\n'), btn);
+    }
+
+    // ---------- Scan context bar + tab counters ----------
+    const CTX_STATUS = { running: ['run', 'ÇALIŞIYOR'], ok: ['ok', 'TAMAMLANDI'], err: ['err', 'BAŞARISIZ'],
+        timeout: ['warn', 'ZAMAN AŞIMI'], cancelled: ['warn', 'İPTAL EDİLDİ'] };
+    function setCtx(c) {
+        const box = document.getElementById('scan-ctx');
+        if (!c) { box.classList.remove('show'); return; }
+        const st = CTX_STATUS[c.status] || CTX_STATUS.running;
+        document.getElementById('ctx-tool').textContent = c.tool || '';
+        document.getElementById('ctx-target').textContent = c.target || '';
+        const badge = document.getElementById('ctx-status');
+        badge.className = 'badge ' + st[0]; badge.textContent = st[1];
+        document.getElementById('ctx-meta').textContent = c.meta || '';
+        const rep = document.getElementById('ctx-report');
+        rep.style.display = c.report ? '' : 'none';
+        rep.onclick = c.report || null;
+        box.classList.add('show');
+    }
+    function setLiveRunning(on) {
+        document.getElementById('live-dot').classList.toggle('on', on);
+        document.getElementById('live-stop').style.display = on ? '' : 'none';
+        if (on) setLiveInfo('');
+    }
+    function fmtSecs(sec) {
+        sec = Math.round(sec || 0);
+        if (sec < 60) return sec + ' sn';
+        const m = Math.floor(sec / 60), s = sec % 60;
+        return m < 60 ? `${m} dk ${s} sn` : `${Math.floor(m / 60)} sa ${m % 60} dk`;
     }
     function switchTab(tab) {
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
@@ -645,6 +825,7 @@
     // events are only a "new data, pull now" nudge for low latency.
     let currentScanId = null, scanning = false;
     let currentWorkflowId = null;   // set while a chained recon workflow runs
+    let runningCtx = null;          // { tool, target, started } of the scan started from this page
     let follow = null;              // { id, since, cmdShown } — scan the console is streaming
     let followTimer = null, ticking = false, nudgeTimer = null;
     const SCAN_DONE = ['completed', 'failed', 'timeout', 'cancelled'];
@@ -710,6 +891,7 @@
     function showScanProgress(s, prefix) {
         const el = s.elapsed || 0, to = s.timeout || 0;
         const tail = `${fmtDur(el)} / ${fmtDur(to)} (zaman aşımı)`;
+        setLiveInfo(fmtDur(el));
         if (s.progress && s.progress.percent != null) {
             const p = s.progress;
             setProgress(Math.max(2, Math.min(99, p.percent)));
@@ -728,7 +910,7 @@
         const wordlist = document.getElementById('wordlist').value.trim();
         const timeout = document.getElementById('timeout').value.trim();
         if (!target) { setStatus('Lütfen bir hedef girin', 'error'); return; }
-        if (tool === 'recon') { runRecon(target, params, wordlist); return; }
+        if (tool === 'recon') { runRecon(target); return; }
 
         scanning = true;
         currentScanId = 'scan_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
@@ -741,7 +923,10 @@
         setStatus('Tarama başlatıldı…', 'info');
         setIndeterminate();
         switchTab('live');
-        consoleEl().innerHTML = '';
+        consoleEl().innerHTML = ''; lineCount = 0;
+        runningCtx = { tool, target, started: new Date() };
+        setCtx({ tool, target, status: 'running', meta: 'Başladı: ' + runningCtx.started.toLocaleTimeString('tr-TR') });
+        setLiveRunning(true);
         appendLine('Tarama hazırlanıyor: ' + tool + ' → ' + target, 'sys');
 
         const body = buildBody(tool, target, params, wordlist, currentScanId);
@@ -784,11 +969,17 @@
         clearInterval(followTimer); followTimer = null; follow = null;
         if (!s) { appendLine('✕ Tarama kaydı sunucuda bulunamadı', 'err'); setStatus('Tarama durumu alınamadı', 'error'); finishScan(false); return; }
         const dur = fmtDur(s.elapsed);
+        if (runningCtx) {
+            const st = { completed: 'ok', timeout: 'timeout', cancelled: 'cancelled' }[s.status] || 'err';
+            setCtx({ tool: runningCtx.tool, target: runningCtx.target, status: st,
+                     meta: fmtSecs(s.elapsed) + ' · ' + runningCtx.started.toLocaleString('tr-TR') });
+            setLiveInfo(dur);
+        }
         if (s.status === 'completed') {
             appendLine(`✓ Tamamlandı — ${dur} (kod: ${s.return_code})`, 'done');
             setStatus(`Tarama tamamlandı — ${dur}`, 'ok');
         } else if (s.status === 'timeout') {
-            appendLine(`⚠ Zaman aşımı (${fmtDur(s.timeout)}) — o ana kadarki çıktı geçmişe kaydedildi`, 'err');
+            appendLine(`! Zaman aşımı (${fmtDur(s.timeout)}) — o ana kadarki çıktı geçmişe kaydedildi`, 'err');
             setStatus(`Zaman aşımı: ${fmtDur(s.timeout)} doldu, kısmi sonuç kaydedildi. Daha uzun süre için "Zaman aşımı" alanını artırın.`, 'error');
         } else if (s.status === 'cancelled') {
             appendLine('✕ Kullanıcı tarafından iptal edildi', 'err');
@@ -805,9 +996,14 @@
         scanning = false;
         currentScanId = null;
         clearInterval(followTimer); followTimer = null; follow = null;
+        setLiveRunning(false);
+        if (runningCtx && !ok && document.getElementById('ctx-status').textContent === CTX_STATUS.running[1]) {
+            setCtx({ tool: runningCtx.tool, target: runningCtx.target, status: 'err', meta: runningCtx.started.toLocaleString('tr-TR') });
+        }
+        runningCtx = null;
         const cbtn = document.getElementById('cancel-btn');
         document.getElementById('run-btn').disabled = false;
-        document.getElementById('run-label').textContent = '▶ Taramayı Başlat';
+        document.getElementById('run-label').textContent = 'Taramayı Başlat';
         cbtn.style.display = 'none';
         cbtn.disabled = false;
         document.getElementById('s-active').textContent = '—';
@@ -842,20 +1038,26 @@
         });
     }
 
-    function runRecon(target, params, wordlist) {
+    function runRecon(target) {
         const wid = uuid4();
         socket.emit('join_scan', { scan_id: wid });
-        const stepTimeout = document.getElementById('rc-timeout').value.trim();
+        const val = id => document.getElementById(id).value.trim();
+        const runGobuster = document.getElementById('rc-gobuster').checked;
+        const runNikto = document.getElementById('rc-nikto').checked;
         const body = {
             workflow_id: wid,
             target: target,
-            nmap_args: params || '-T4 -Pn',
-            run_gobuster: document.getElementById('rc-gobuster').checked,
-            run_nikto: document.getElementById('rc-nikto').checked,
-            max_web_targets: parseInt(document.getElementById('rc-max').value || '5', 10)
+            nmap_args: val('rc-nmap-args') || '-T4 -Pn',
+            run_gobuster: runGobuster,
+            run_nikto: runNikto,
+            max_web_targets: parseInt(val('rc-max') || '5', 10)
         };
-        if (stepTimeout) body.step_timeout = parseInt(stepTimeout, 10);   // empty = per-tool defaults
-        if (wordlist) body.wordlist = wordlist;
+        // Send a step's fields only when filled in: an empty string would replace
+        // the server default (e.g. gobuster "-t 30") with "no arguments".
+        if (val('rc-timeout')) body.step_timeout = parseInt(val('rc-timeout'), 10);
+        if (runGobuster && val('rc-gobuster-args')) body.gobuster_args = val('rc-gobuster-args');
+        if (runGobuster && val('rc-wordlist')) body.wordlist = val('rc-wordlist');
+        if (runNikto && val('rc-nikto-args')) body.nikto_args = val('rc-nikto-args');
         document.getElementById('run-btn').disabled = true;
         setStatus('Recon akışı başlatılıyor…', 'info');
         fetch(`${API}/api/workflows/recon`, {
@@ -885,8 +1087,10 @@
         const cbtn = document.getElementById('cancel-btn');
         cbtn.style.display = 'flex'; cbtn.disabled = false;
         document.getElementById('s-active').textContent = 'recon';
-        consoleEl().innerHTML = '';
-        appendLine((resumed ? '↻ Devam eden recon akışına bağlanıldı → ' : '🔗 Zincirleme recon başladı → ') + (wf ? wf.target : id), 'sys');
+        consoleEl().innerHTML = ''; lineCount = 0;
+        setLiveRunning(true);
+        setCtx({ tool: 'recon', target: wf ? wf.target : '', status: 'running', meta: 'Zincirleme recon akışı' });
+        appendLine((resumed ? 'Devam eden recon akışına bağlanıldı → ' : 'Zincirleme recon başladı → ') + (wf ? wf.target : id), 'sys');
         setStatus(resumed ? 'Devam eden recon akışı izleniyor…' : 'Recon akışı başladı — önce nmap çalışıyor…', 'info');
         setIndeterminate();
         switchTab('live');
@@ -948,12 +1152,12 @@
         const label = `Adım ${st.index + 1} (${st.tool})`;
         if (st.status === 'done') appendLine(`✓ ${label} bitti — ${n} bulgu${st.note ? ' • ' + st.note : ''}`, 'done');
         else if (st.status === 'failed') appendLine(`✕ ${label} başarısız${st.note ? ': ' + st.note : ''}`, 'err');
-        else if (st.status === 'skipped') appendLine(`↷ ${label} atlandı${st.note ? ': ' + st.note : ''}`, 'sys');
+        else if (st.status === 'skipped') appendLine(`– ${label} atlandı${st.note ? ': ' + st.note : ''}`, 'sys');
         else appendLine(`✕ ${label} iptal edildi`, 'err');
         if (st.tool === 'nmap' && st.status === 'done' && !wfWebShown) {
             wfWebShown = true;
             const web = wf.web_targets || [];
-            appendLine(web.length ? `🌐 Web hedefleri: ${web.map(w => w.url).join(', ')}` : '🌐 Web portu bulunamadı', 'sys');
+            appendLine(web.length ? `Web hedefleri: ${web.map(w => w.url).join(', ')}` : 'Web portu bulunamadı', 'sys');
         }
     }
 
@@ -961,9 +1165,10 @@
         clearInterval(wfPollTimer); wfPollTimer = null;
         socket.emit('leave_scan', { scan_id: currentWorkflowId });
         currentWorkflowId = null; scanning = false; follow = null;
+        setLiveRunning(false);
         const cbtn = document.getElementById('cancel-btn');
         document.getElementById('run-btn').disabled = false;
-        document.getElementById('run-label').textContent = '▶ Taramayı Başlat';
+        document.getElementById('run-label').textContent = 'Taramayı Başlat';
         cbtn.style.display = 'none'; cbtn.disabled = false;
         document.getElementById('s-active').textContent = '—';
         setProgress(100);
@@ -971,11 +1176,11 @@
         const s = wf.summary || {};
         if (wf.status === 'completed') {
             const msg = `Recon tamamlandı — ${s.web_targets||0} web hedefi, ${s.high||0} yüksek / ${s.medium||0} orta bulgu`;
-            setStatus(msg, 'ok'); appendLine('■ ' + msg, 'done');
+            setStatus(msg, 'ok'); appendLine('✓ ' + msg, 'done');
         } else if (wf.status === 'cancelled') {
-            setStatus('Recon akışı iptal edildi', 'error'); appendLine('■ Recon akışı iptal edildi', 'err');
+            setStatus('Recon akışı iptal edildi', 'error'); appendLine('✕ Recon akışı iptal edildi', 'err');
         } else {
-            setStatus('Recon başarısız: ' + (wf.error || wf.status), 'error'); appendLine('■ ' + (wf.error || 'Recon başarısız'), 'err');
+            setStatus('Recon başarısız: ' + (wf.error || wf.status), 'error'); appendLine('✕ ' + (wf.error || 'Recon başarısız'), 'err');
         }
         loadHistory();
         renderWorkflow(wf);
@@ -995,13 +1200,19 @@
         viewedWorkflowId = wf.id;
         const s = wf.summary || {};
         const running = wf.status === 'running' && wf.id === currentWorkflowId;
+        const steps = wf.steps || [];
+        const finished = steps.filter(x => TERMINAL.includes(x.status)).length;
+        document.getElementById('cnt-recon').textContent = steps.length ? `${finished}/${steps.length}` : '';
+        setCtx({ tool: 'recon', target: wf.target,
+                 status: { running: 'running', completed: 'ok', cancelled: 'cancelled' }[wf.status] || 'err',
+                 meta: `${finished}/${steps.length} adım · ${fmtTime(wf.created_at)}`,
+                 report: wf.status === 'running' ? null : () => downloadWorkflowReport(wf.id) });
         let html = `<div class="wf-head">
             <span class="wt">${esc(wf.target)}</span>
             <span class="wst ${esc(wf.status)}">${WST_LABEL[wf.status] || esc(wf.status)}</span>
-            <span class="wm">${fmtTime(wf.created_at)}</span>
+            <span class="wm">${steps.length ? `Adım ${Math.min(finished + 1, steps.length)} / ${steps.length}` : ''}</span>
             <span class="sp"></span>
-            ${running ? `<button class="btn-sm" onclick="cancelRecon()">⊗ İptal</button>`
-                      : `<button class="btn-sm primary" onclick="downloadWorkflowReport('${wf.id}')">📄 PDF Rapor</button>`}
+            ${running ? `<button class="btn-sm" onclick="cancelRecon()">İptal</button>` : ''}
         </div>
         <div class="f-kpis">
             <div class="f-kpi"><div class="n">${s.open_ports||0}</div><div class="l">Açık Port</div></div>
@@ -1011,33 +1222,30 @@
         </div>`;
         if (wf.error) html += `<div class="status show error" style="margin:0 0 12px">${esc(wf.error)}</div>`;
         if (wf.web_targets && wf.web_targets.length) {
-            html += `<div class="f-title">🌐 Web Hedefleri</div><div class="web-chips">` +
+            html += `<div class="f-title">Web Hedefleri</div><div class="web-chips">` +
                 wf.web_targets.map(w => `<span class="chip"><b>${esc(w.url)}</b> ${esc(w.service||'')}</span>`).join('') + `</div>`;
         }
-        html += `<div class="f-title">🧩 Adımlar <span class="hint" style="font-weight:400">(tıklayınca o taramanın detayı açılır)</span></div><div class="steps">`;
-        for (const st of (wf.steps || [])) {
+        html += `<div class="f-title">Adımlar <span class="hint" style="font-weight:400">(tıklayınca o taramanın bulguları açılır)</span></div><div class="rflow">`;
+        const STEP_MARK = { done: '✓', failed: '✕', running: '…', skipped: '–', cancelled: '✕', pending: '' };
+        for (const st of steps) {
             const sm = st.summary || {};
             const click = st.history_id ? ` click" onclick="showDetail('${st.history_id}')` : '';
-            html += `<div class="step ${esc(st.status)}${click}" title="${esc(st.command||'')}">
-                <span class="si">${st.index + 1}</span>
-                <span class="stool">${esc(st.tool)}</span>
-                <span class="starget">${esc(st.target)}</span>
-                <span class="sright">${st.duration ? st.duration.toFixed(1) + 's' : ''}${st.summary ? ' • ' + (sm.total||0) + ' bulgu' : ''}
-                    <span class="wst ${esc(st.status)}">${WST_LABEL[st.status] || esc(st.status)}</span></span>
-                ${st.note ? `<div class="snote">${esc(st.note)}</div>` : ''}
+            const meta = st.status === 'running' ? 'Çalışıyor'
+                : [st.duration ? fmtSecs(st.duration) : '', st.summary ? (sm.total || 0) + ' bulgu' : '', st.note || '']
+                    .filter(Boolean).join(' · ') || (WST_LABEL[st.status] || st.status);
+            html += `<div class="rstep ${esc(st.status)}${click}" title="${esc(st.command||'')}">
+                <div class="rn"><span>${st.index + 1}</span><span>${STEP_MARK[st.status] ?? ''}</span></div>
+                <div class="rt">${esc(st.tool)}</div>
+                <div class="rg">${esc(st.target)}</div>
+                <div class="rm">${esc(meta)}</div>
             </div>`;
         }
         html += `</div>`;
+        if (steps.length) html += `<div class="rbar"><div style="width:${Math.round(finished / steps.length * 100)}%"></div></div>`;
         const fl = wf.findings || [];
         if (fl.length) {
-            html += `<div class="f-title">⚠️ Birleşik Bulgular${fl.length > 40 ? ' (en kritik 40)' : ''}</div>`;
-            for (const it of fl.slice(0, 40)) {
-                html += `<div class="finding ${esc(it.severity)}">
-                    <div class="fdot"></div>
-                    <div><div class="ft">${esc(it.title)}<span class="ftool">${esc(it.tool)} • ${esc(it.source)}</span></div>${it.detail ? `<div class="fd">${esc(it.detail)}</div>` : ''}</div>
-                    <span class="sev ${esc(it.severity)} fright">${SEV_LABEL[it.severity] || esc(it.severity)}</span>
-                </div>`;
-            }
+            html += `<div class="f-title">Birleşik Bulgular${fl.length > 40 ? ' (en kritik 40)' : ''}</div>`;
+            html += fl.slice(0, 40).map(it => findingRow(it, `${it.tool} · ${it.source}`)).join('');
         }
         document.getElementById('recon-view').innerHTML = html;
     }
@@ -1086,8 +1294,11 @@
                 document.getElementById('run-label').innerHTML = '<span class="spinner"></span> Taranıyor…';
                 document.getElementById('cancel-btn').style.display = 'flex';
                 document.getElementById('s-active').textContent = sc.tool || '…';
-                consoleEl().innerHTML = '';
-                appendLine(`↻ Devam eden taramaya bağlanıldı: ${sc.tool} → ${sc.target}`, 'sys');
+                consoleEl().innerHTML = ''; lineCount = 0;
+                runningCtx = { tool: sc.tool || '', target: sc.target || '', started: new Date() };
+                setCtx({ tool: runningCtx.tool, target: runningCtx.target, status: 'running', meta: 'Devam eden tarama' });
+                setLiveRunning(true);
+                appendLine(`Devam eden taramaya bağlanıldı: ${sc.tool} → ${sc.target}`, 'sys');
                 switchTab('live');
                 followScan(sc.scan_id);
             });
@@ -1141,59 +1352,53 @@
         renderFindings(findingsData);
     }
 
+    // One finding row: risk stripe, title, source; click opens the detail (if any)
+    function findingRow(it, src) {
+        const sev = esc(it.severity);
+        const more = it.detail ? `<div class="more">${esc(it.detail)}</div>` : '';
+        return `<div class="frow ${sev}${more ? ' has-more' : ''}"${more ? ` onclick="this.classList.toggle('open')"` : ''}>
+            <div class="top"><span class="t">${esc(it.title)}</span>${src ? `<span class="src">${esc(src)}</span>` : ''}
+                <span class="sp"></span><span class="sev ${sev}">${SEV_LABEL[it.severity] || sev}</span>${more ? '<span class="chev">▼</span>' : ''}</div>
+            ${more}</div>`;
+    }
+
     function renderFindings(f) {
         findingsData = f;
         const box = document.getElementById('findings');
+        const cnt = document.getElementById('cnt-findings');
         if (!f || f.supported === false) {
-            box.innerHTML = `<div class="empty-state">Bu araç (${esc(f && f.tool || '')}) için otomatik ayrıştırma henüz yok.<br>Ham çıktıyı "📊 Ham Detay" sekmesinden görebilirsin.</div>`;
+            cnt.textContent = '';
+            box.innerHTML = `<div class="empty-state">Bu araç (${esc(f && f.tool || '')}) için otomatik ayrıştırma henüz yok.<br>Ham çıktıyı "Ham Detay" sekmesinden görebilirsin.</div>`;
             return;
         }
         const s = f.summary || {};
+        const allPorts = f.ports || [], allItems = f.findings || [];
+        cnt.textContent = (allPorts.length + allItems.length) || '';
         const flt = findingsFilter;
-        const kpi = (key, n, label, color) =>
-            `<button type="button" class="f-kpi${flt === key ? ' active' : ''}" aria-pressed="${flt === key}"
-                title="${flt === key ? 'Filtreyi kaldır' : 'Sadece ' + label + ' göster'}" onclick="setFindingsFilter('${key}')">
-                <div class="n"${color ? ` style="color:var(${color})"` : ''}>${n}</div><div class="l">${label}</div></button>`;
-        let html = `<div class="f-kpis">
-            ${kpi('ports', s.open_ports||0, 'Açık Port', '')}
-            ${kpi('high', s.high||0, 'Yüksek', '--err')}
-            ${kpi('medium', s.medium||0, 'Orta', '--warn')}
-            ${kpi('low', (s.low||0)+(s.info||0), 'Düşük/Bilgi', '--ok')}
+        const chip = (key, label, n, color) =>
+            `<button type="button" class="fchip${flt === key ? ' on' : ''}" aria-pressed="${flt === key}" onclick="setFindingsFilter(${key ? `'${key}'` : 'null'})">${color ? `<span class="d" style="background:var(${color})"></span>` : ''}${label}<b>${n}</b></button>`;
+        let html = `<div class="fchips">
+            ${chip(null, 'Tümü', allPorts.length + allItems.length)}
+            ${chip('ports', 'Açık Port', s.open_ports || allPorts.length)}
+            ${chip('high', 'Yüksek', s.high||0, '--err')}
+            ${chip('medium', 'Orta', s.medium||0, '--warn')}
+            ${chip('low', 'Düşük/Bilgi', (s.low||0)+(s.info||0), '--ok')}
         </div>`;
-        if (flt) {
-            html += `<div class="f-filter">Filtre: <b>${FILTER_LABEL[flt]}</b>
-                <button type="button" onclick="setFindingsFilter(null)">✕ Tümünü göster</button></div>`;
-        }
 
-        const ports = (f.ports || []).filter(p => !flt || flt === 'ports' || sevMatches(p.risk, flt));
+        const ports = allPorts.filter(p => !flt || flt === 'ports' || sevMatches(p.risk, flt));
         const order = { high:0, medium:1, low:2, info:3 };
-        const items = flt === 'ports' ? [] : [...(f.findings || [])]
+        const items = flt === 'ports' ? [] : [...allItems]
             .filter(it => !flt || sevMatches(it.severity, flt))
             .sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9));
 
-        if (ports.length) {
-            html += `<div class="f-title">📡 Açık Portlar & Servisler</div>
-                <table class="ports-table"><tr><th>Port</th><th>Servis</th><th>Sürüm</th><th>Risk</th></tr>`;
-            for (const p of ports) {
-                html += `<tr>
-                    <td class="p">${esc(p.port)}/${esc(p.proto)}</td>
-                    <td>${esc(p.service||'')}</td>
-                    <td class="vmono">${esc(p.version||'-')}</td>
-                    <td><span class="sev ${p.risk}">${SEV_LABEL[p.risk]||p.risk}</span></td>
-                </tr>`;
-            }
-            html += `</table>`;
-        }
-
         if (items.length) {
-            html += `<div class="f-title">⚠️ Öne Çıkan Bulgular</div>`;
-            for (const it of items) {
-                html += `<div class="finding ${it.severity}">
-                    <div class="fdot"></div>
-                    <div><div class="ft">${esc(it.title)}</div>${it.detail?`<div class="fd">${esc(it.detail)}</div>`:''}</div>
-                    <span class="sev ${it.severity} fright">${SEV_LABEL[it.severity]||it.severity}</span>
-                </div>`;
-            }
+            html += `<div class="f-title">Bulgular</div>` + items.map(it => findingRow(it, '')).join('');
+        }
+        if (ports.length) {
+            html += `<div class="f-title">Açık Portlar</div><div class="pcards">` + ports.map(p => `<div class="pcard">
+                <div class="ph"><span class="pp">${esc(p.port)}/${esc(p.proto)}</span><span class="ps">${esc(p.service||'')}</span>
+                    <span class="sev ${esc(p.risk)}">${SEV_LABEL[p.risk]||esc(p.risk)}</span></div>
+                <div class="pv" title="${esc(p.version||'')}">${esc(p.version||'-')}</div></div>`).join('') + `</div>`;
         }
         if (!ports.length && !items.length) {
             html += flt
@@ -1215,18 +1420,31 @@
         fetch(`${API}/api/history/${id}`).then(r => r.json()).then(data => {
             const c = data.command; if (!c) return;
             const cls = c.success ? 'ok' : 'err';
-            let html = `
-                <div style="margin-bottom:14px">
-                    <button class="btn-sm primary" style="width:100%" onclick="downloadReport('${id}')">📄 Bu Taramanın PDF Raporunu İndir</button>
-                </div>
-                <div class="detail-row"><div class="k">Komut</div><div class="v mono">${esc(c.command)}</div></div>
-                <div class="detail-row"><div class="k">Hedef</div><div class="v">${esc(c.target||'—')}</div></div>
-                <div class="detail-row"><div class="k">Zaman</div><div class="v">${fmtTime(c.timestamp)}</div></div>
-                <div class="detail-row"><div class="k">Süre</div><div class="v">${(c.duration||0).toFixed(3)} s</div></div>
-                <div class="detail-row"><div class="k">Durum</div><div class="v"><span class="badge ${cls}">${c.success?'Başarılı':'Başarısız'}</span> &nbsp; kod: ${c.return_code}${c.timed_out?' • zaman aşımı':''}</div></div>`;
-            if (c.stdout) html += `<div class="detail-row"><div class="k">Çıktı (stdout)</div><div class="console-detail">${esc(c.stdout.slice(0,8000))}</div></div>`;
-            if (c.stderr) html += `<div class="detail-row"><div class="k">Hata (stderr)</div><div class="console-detail" style="color:#fca5a5">${esc(c.stderr.slice(0,4000))}</div></div>`;
+            const tool = (c.command || '').trim().split(/\s+/)[0];
+            if (!scanning) {   // don't hide a running scan's bar behind an old record
+                setCtx({ tool, target: c.target || '', status: c.timed_out ? 'timeout' : (c.success ? 'ok' : 'err'),
+                         meta: `${fmtSecs(c.duration)} · ${fmtTime(c.timestamp)}`, report: () => downloadReport(id) });
+            }
+            let html = `<div class="kvgrid">
+                <span class="k">Komut</span><span class="v mono">${esc(c.command)}
+                    <button class="mini-btn" style="padding:4px 7px;margin-left:6px;vertical-align:middle" title="Komutu kopyala" id="copy-cmd">${ICON.copy}</button></span>
+                <span class="k">Hedef</span><span class="v mono">${esc(c.target||'—')}</span>
+                <span class="k">Zaman</span><span class="v">${fmtTime(c.timestamp)}</span>
+                <span class="k">Süre</span><span class="v">${fmtSecs(c.duration)}</span>
+                <span class="k">Durum</span><span class="v"><span class="badge ${cls}">${c.success?'BAŞARILI':'BAŞARISIZ'} · çıkış ${esc(c.return_code)}</span>${c.timed_out?' &nbsp;zaman aşımı':''}</span>
+            </div>`;
+            const out = c.stdout ? c.stdout.slice(0, 8000) : '', err = c.stderr ? c.stderr.slice(0, 4000) : '';
+            if (out || err) {
+                const n = (out ? out.split('\n').length : 0) + (err ? err.split('\n').length : 0);
+                html += `<div style="margin-top:16px">
+                    <button class="mini-btn" onclick="this.nextElementSibling.style.display='block';this.remove()">▼ Ham çıktıyı göster (${n} satır)</button>
+                    <div style="display:none">
+                        ${out ? `<div class="console-detail">${esc(out)}</div>` : ''}
+                        ${err ? `<div class="console-detail" style="color:#fca5a5">${esc(err)}</div>` : ''}
+                    </div></div>`;
+            }
             document.getElementById('detail').innerHTML = html;
+            document.getElementById('copy-cmd').onclick = e => copyText(c.command || '', e.currentTarget);
         }).catch(e => console.log('detail err', e));
     }
 
@@ -1265,14 +1483,37 @@
     const TOOL_LABEL = { nmap:'Nmap', gobuster:'Gobuster', dirb:'Dirb', nikto:'Nikto', sqlmap:'SQLmap',
         enum4linux:'Enum4linux', metasploit:'Metasploit', hydra:'Hydra', john:'John', wpscan:'WPScan' };
 
+    // Chained recon is not a stored template: this card is always first and
+    // can't be edited or deleted. It switches the form into recon mode.
+    const RECON_CARD = `<div class="tpl flow">
+        <div class="thead"><span class="tname">Zincirleme Recon</span><span class="ttool flow">akış</span></div>
+        <div class="tdesc">Önce nmap çalışır, bulunan her web portuna gobuster ve nikto otomatik uygulanır</div>
+        <div class="tparams">nmap -sV → gobuster · nikto</div>
+        <span class="tbadge">çok adımlı</span>
+        <div class="tactions">
+            <button class="tbtn" onclick="applyRecon()">Yükle</button>
+            <button class="tbtn run" onclick="applyRecon(true)">Çalıştır</button>
+        </div>
+    </div>`;
+    function applyRecon(run) {
+        document.getElementById('tool').value = 'recon';
+        onToolChange();
+        if (!run) { setStatus('Zincirleme Recon yüklendi — hedef girin, adım parametrelerini düzenleyin', 'info'); document.getElementById('target').focus(); return; }
+        if (!document.getElementById('target').value.trim()) {
+            setStatus('Recon için önce bir hedef girin', 'error');
+            document.getElementById('target').focus();
+            return;
+        }
+        runScan();
+    }
+
     function loadTemplates() {
+        const box = document.getElementById('templates');
         fetch(`${API}/api/templates`).then(r => r.json()).then(data => {
-            const box = document.getElementById('templates');
             const list = data.templates || [];
-            if (!list.length) { box.innerHTML = '<div class="empty-state">Şablon yok</div>'; return; }
-            box.innerHTML = list.map(t => {
+            box.innerHTML = RECON_CARD + list.map(t => {
                 const del = t.builtin ? '' : `<button class="tdel" title="Sil" onclick="deleteTemplate('${t.id}', event)">✕</button>`;
-                const badge = t.builtin ? '<span class="tbadge">★ hazır</span>' : '<span class="tbadge">kişisel</span>';
+                const badge = t.builtin ? '<span class="tbadge">hazır</span>' : '<span class="tbadge">kişisel</span>';
                 const paramLine = [t.params, t.wordlist].filter(Boolean).join('  ') || '(parametresiz)';
                 return `<div class="tpl">
                     ${del}
@@ -1282,11 +1523,11 @@
                     ${badge}
                     <div class="tactions">
                         <button class="tbtn" onclick='applyTemplate(${JSON.stringify(t)})'>Yükle</button>
-                        <button class="tbtn run" onclick='runTemplate(${JSON.stringify(t)})'>▶ Çalıştır</button>
+                        <button class="tbtn run" onclick='runTemplate(${JSON.stringify(t)})'>Çalıştır</button>
                     </div>
                 </div>`;
             }).join('');
-        }).catch(e => console.log('templates err', e));
+        }).catch(e => { console.log('templates err', e); box.innerHTML = RECON_CARD; });
     }
 
     function applyTemplate(t, silent) {
@@ -1320,6 +1561,7 @@
 
     function openSaveTemplate() {
         const tool = document.getElementById('tool').value;
+        if (tool === 'recon') { setStatus('Zincirleme Recon zaten şablonlarda; kayıt tek araçlı taramalar için', 'info'); return; }
         const params = document.getElementById('params').value.trim();
         const wordlist = document.getElementById('wordlist').value.trim();
         document.getElementById('tpl-name').value = '';
