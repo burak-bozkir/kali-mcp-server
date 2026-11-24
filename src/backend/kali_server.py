@@ -8,6 +8,7 @@ import argparse
 import json
 import logging
 import os
+import secrets
 import shlex
 import signal
 import subprocess
@@ -208,8 +209,41 @@ class Base(DeclarativeBase):
 app = Flask(__name__, static_folder='static', static_url_path='/static')
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev-secret-key-change-in-production")
 db = SQLAlchemy(app, model_class=Base)
+
+
+# ============================================================================
+# Security settings: SECRET_KEY, CORS, generic command endpoint
+# ============================================================================
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+# SECRET_KEY signs Flask cookies/sessions. Never fall back to a fixed, public
+# value: without SECRET_KEY a random key is generated for this run.
+_PUBLIC_SECRET_KEYS = {"dev-secret-key-change-in-production", "change-me-in-production",
+                       "changeme", "secret", "dev"}
+_secret_key = os.environ.get("SECRET_KEY", "").strip()
+if _secret_key in _PUBLIC_SECRET_KEYS:
+    logger.warning("SECRET_KEY is a well-known placeholder value; ignoring it.")
+    _secret_key = ""
+if not _secret_key:
+    _secret_key = secrets.token_hex(32)
+    logger.warning("SECRET_KEY is not set: using a random key for this run. "
+                   "Set SECRET_KEY to keep it stable across restarts.")
+app.config['SECRET_KEY'] = _secret_key
+
+# CORS: the dashboard is served from this same origin, so no other site needs
+# access. Default: CORS off. Set CORS_ORIGINS="http://a,http://b" to allow
+# specific origins ("*" is accepted but not recommended).
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "").split(",") if o.strip()]
+
+# /api/command runs any shell command. Off unless KALI_ENABLE_COMMAND=1.
+ENABLE_COMMAND_ENDPOINT = _env_flag("KALI_ENABLE_COMMAND", False)
 
 # Initialize SocketIO for real-time communication
 socketio = None
@@ -217,19 +251,25 @@ if SOCKETIO_AVAILABLE:
     # Force "threading": scans use real OS threads and blocking subprocess calls.
     # If eventlet/gevent happen to be installed, auto-detection would pick them
     # and (without monkey patching) live events would never leave the server.
-    socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+    # cors_allowed_origins=None -> python-socketio only accepts same-origin connections.
+    _sio_origins = None if not CORS_ORIGINS else ("*" if CORS_ORIGINS == ["*"] else CORS_ORIGINS)
+    socketio = SocketIO(app, cors_allowed_origins=_sio_origins, async_mode="threading")
     logger.info(f"Flask-SocketIO initialized (async_mode={socketio.async_mode})")
 else:
     logger.warning(logger_warning)
 
 # Enable CORS - Cross-Origin Resource Sharing
-try:
-    from flask_cors import CORS
-    cors_origins = os.environ.get("CORS_ORIGINS", "*")
-    CORS(app, resources={r"/api/*": {"origins": cors_origins}})
-    logger.info(f"CORS enabled for origins: {cors_origins}")
-except ImportError:
-    logger.warning("Flask-CORS not installed. CORS support disabled. Install with: pip install flask-cors")
+if CORS_ORIGINS:
+    try:
+        from flask_cors import CORS
+        CORS(app, resources={r"/api/*": {"origins": CORS_ORIGINS}})
+        logger.info(f"CORS enabled for origins: {', '.join(CORS_ORIGINS)}")
+        if "*" in CORS_ORIGINS:
+            logger.warning("CORS_ORIGINS='*' lets any website call this API from a browser")
+    except ImportError:
+        logger.warning("Flask-CORS not installed. CORS support disabled. Install with: pip install flask-cors")
+else:
+    logger.info("CORS disabled (same-origin only). Set CORS_ORIGINS to allow other origins.")
 
 
 # ============================================================================
@@ -1254,7 +1294,13 @@ def get_all_tools_status(force_refresh: bool = False) -> Dict[str, Dict[str, Any
 
 @app.route("/api/command", methods=["POST"])
 def generic_command():
-    """Execute any command provided in the request."""
+    """Execute any command provided in the request (only if KALI_ENABLE_COMMAND=1)."""
+    if not ENABLE_COMMAND_ENDPOINT:
+        logger.warning(f"/api/command is disabled; rejected request from {request.remote_addr}")
+        return jsonify({
+            "error": "The generic command endpoint is disabled. Start the server with "
+                     "KALI_ENABLE_COMMAND=1 to enable it."
+        }), 403
     try:
         params = request.json
         command = params.get("command", "")
@@ -1676,7 +1722,8 @@ def health_check():
         "tools_status": simple_status,
         "available_tools_count": available_count,
         "total_tools_count": total_count,
-        "all_essential_tools_available": available_count >= 4
+        "all_essential_tools_available": available_count >= 4,
+        "command_endpoint_enabled": ENABLE_COMMAND_ENDPOINT
     })
 
 

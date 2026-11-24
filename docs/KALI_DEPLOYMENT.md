@@ -103,4 +103,5 @@ python3 -m pip install reportlab
 ## Security note
 
 There is no authentication. Bind to `127.0.0.1` for local-only use, or restrict
-network access with a firewall. Only scan systems you are authorized to test.
+network access with a firewall (e.g. a VirtualBox host-only network). CORS is off and
+`/api/command` (any shell command) is disabled unless `KALI_ENABLE_COMMAND=1`. Only scan systems you are authorized to test.

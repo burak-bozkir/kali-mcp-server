@@ -22,6 +22,7 @@ Kali MCP Server turns a set of command-line security tools (nmap, sqlmap, gobust
 - **Modern UI** — responsive dashboard with a light/dark theme toggle and a live tool-availability panel.
 - **MCP integration** — the same tools are exposed to AI agents (e.g. Claude Desktop) via the Model Context Protocol.
 - **Per-tool scan history** — every scan is stored in SQLite, searchable and re-openable.
+- **Safer defaults** — CORS is off (other websites can't call the API from your browser), the Flask `SECRET_KEY` is never a public default, and the arbitrary-command endpoint (`/api/command` / MCP `execute_command`) is disabled unless you turn it on.
 
 ## 🧰 Supported Tools
 
@@ -65,8 +66,9 @@ Set via environment variables (see [`.env.example`](.env.example)):
 | `MAX_COMMAND_TIMEOUT` | `14400` | Upper limit for any requested timeout |
 | `MAX_CONCURRENT_WORKFLOWS` | `2` | Recon workflows allowed to run at the same time |
 | `TOOL_STATUS_CACHE_TTL` | `60` | Tool-availability cache lifetime (s) |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins |
-| `SECRET_KEY` | *(dev key)* | Flask secret — **change in production** |
+| `KALI_ENABLE_COMMAND` | `0` | `1` enables `/api/command` (any shell command). Off by default |
+| `CORS_ORIGINS` | *(empty = off)* | Comma-separated origins allowed to call the API from a browser |
+| `SECRET_KEY` | *(random per run)* | Flask secret. Public placeholder values are ignored |
 
 ## 🏗️ Architecture
 
@@ -137,7 +139,7 @@ Add this to `claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desk
 }
 ```
 
-Replace the **Python path**, the **repo path**, and the **Kali VM IP**. The Python you point to must have the MCP deps installed (`pip install mcp requests`). Restart Claude Desktop and the `kali` tools appear.
+Replace the **Python path**, the **repo path**, and the **Kali VM IP**. The `execute_command` tool (any shell command) is only exposed when you add `"--enable-command"` to `args` **and** start the server with `KALI_ENABLE_COMMAND=1`. The Python you point to must have the MCP deps installed (`pip install mcp requests`). Restart Claude Desktop and the `kali` tools appear.
 
 ## 🧪 Testing
 
@@ -148,6 +150,7 @@ python3 src/tests/quick_test.py       # fast environment & structure checks (no 
 python3 src/tests/test_db_schema.py   # database model tests
 python3 src/tests/test_recon.py       # recon workflow logic (no server, no Kali tools)
 python3 src/tests/test_shell_quoting.py  # URLs with ?/& reach the tools as one argument
+python3 src/tests/test_security.py    # CORS off, /api/command off, SECRET_KEY not a public default
 # then start the server and run the full suite (incl. live API checks):
 python3 src/tests/test_system.py
 ```

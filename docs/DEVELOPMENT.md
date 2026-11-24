@@ -55,6 +55,9 @@ python3 src/tests/test_recon.py
 # shell quoting of user values in tool commands (no server, nothing executed)
 python3 src/tests/test_shell_quoting.py
 
+# security defaults: CORS off, /api/command off, SECRET_KEY (no server)
+python3 src/tests/test_security.py
+
 # full system test (start the server first for the live checks)
 python3 src/tests/test_system.py
 ```
@@ -70,7 +73,7 @@ curl -X POST http://127.0.0.1:5001/api/tools/nmap \
 
 Everything is configurable via environment variables (see [`.env.example`](../.env.example))
 or CLI flags (`--ip`, `--port`). Key values: `API_PORT`, `API_IP`, `DATABASE_PATH`,
-`COMMAND_TIMEOUT`, `TOOL_STATUS_CACHE_TTL`, `SECRET_KEY`, `CORS_ORIGINS`.
+`COMMAND_TIMEOUT`, `TOOL_STATUS_CACHE_TTL`, `SECRET_KEY`, `CORS_ORIGINS`, `KALI_ENABLE_COMMAND`.
 
 ## Troubleshooting
 

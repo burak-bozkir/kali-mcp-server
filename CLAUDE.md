@@ -22,6 +22,7 @@ A pentest dashboard plus an MCP server that wrap Kali tools (nmap, gobuster, dir
 - Socket.IO is forced to `async_mode="threading"` (real threads + blocking subprocess). The client uses default transports (polling first), because socket.io-client 4.7 has no fallback from websocket-only.
 - Because of `shell=True`, every single user value put into a tool command (url, target, wordlist, data, username, password...) goes through `shell_arg()` (`shlex.quote`). Otherwise a URL like `?id=1&cat=2` is cut at `&`. Free-form `additional_args` / nmap `scan_type` stay unquoted on purpose (they hold several flags).
 - Scans run via `CommandExecutor` with `shell=True` in a **new process group**. Cancel and timeout kill the whole group with `os.killpg`. Keep it that way, or the tool keeps running after "cancel".
+- Security defaults: CORS is off unless `CORS_ORIGINS` is set (Socket.IO too: `cors_allowed_origins=None` = same-origin). `SECRET_KEY` is random per run if unset, and known placeholder values are ignored. `/api/command` returns 403 unless `KALI_ENABLE_COMMAND=1`; `mcp_server.py` only registers `execute_command` with `--enable-command`. There is no API auth on purpose: the owner will add a login system later instead of a token.
 - PDFs come from ReportLab with a registered DejaVu font, so Turkish characters render. Without reportlab, the endpoints return 503.
 
 ## Run
@@ -39,6 +40,7 @@ python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models
 python3 src/tests/test_recon.py       # recon workflow logic, no server
 python3 src/tests/test_shell_quoting.py  # user values (URLs with ?/&) quoted in tool commands
+python3 src/tests/test_security.py    # CORS off, /api/command off, SECRET_KEY
 python3 src/tests/test_system.py      # full suite; live checks need the server running
 ```
 For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` scripts on `PATH`. Start the server with `subprocess.Popen` inside the test process so it doesn't outlive the test.
@@ -60,7 +62,7 @@ For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` 
 4. Scope allowlist guardrail for MCP and UI (AI-security angle).
 5. RBAC, scheduled scans, alerting.
 
-The owner already declined analytics charts and a user/login system for now.
+The owner already declined analytics charts for now. He plans to add a login system later (2026-11-24) and declined a shared API token in the meantime.
 
 ## Legal
 Authorized testing only. Keep the legal notice in the README.
