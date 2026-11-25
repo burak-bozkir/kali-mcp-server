@@ -3,6 +3,10 @@
 How to run Kali MCP Server on a Kali Linux machine. The whole app is a single
 server — no separate dashboard process.
 
+> **Docker alternative:** with Docker installed you can skip the steps below and
+> run `docker compose up -d --build` from the repo root. See the *Docker*
+> section of the README.
+
 ## 1. Get the code onto Kali
 
 **Option A — git (recommended):**

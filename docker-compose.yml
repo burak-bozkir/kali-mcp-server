@@ -1,0 +1,41 @@
+# Start:  docker compose up -d --build
+# Panel:  http://127.0.0.1:5001/
+services:
+  kali-mcp:
+    build:
+      context: .
+      args:
+        INSTALL_METASPLOIT: ${INSTALL_METASPLOIT:-false}
+    image: kali-mcp-server:latest
+    container_name: kali-mcp
+    restart: unless-stopped
+    ports:
+      # Default: only this machine can reach the panel. To reach it from the
+      # LAN (e.g. Claude Desktop on Windows -> Kali VM) set KALI_BIND=0.0.0.0
+      # in .env or on the command line.
+      - "${KALI_BIND:-127.0.0.1}:5001:5001"
+    environment:
+      API_IP: 0.0.0.0
+      API_PORT: 5001
+      DATABASE_PATH: /data/scan_history.db
+      # Values below are read from .env (if present) or your shell
+      SECRET_KEY: ${SECRET_KEY:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      KALI_ENABLE_COMMAND: ${KALI_ENABLE_COMMAND:-0}
+      COMMAND_TIMEOUT: ${COMMAND_TIMEOUT:-180}
+      MAX_COMMAND_TIMEOUT: ${MAX_COMMAND_TIMEOUT:-14400}
+      MAX_HISTORY: ${MAX_HISTORY:-100}
+      MAX_CONCURRENT_WORKFLOWS: ${MAX_CONCURRENT_WORKFLOWS:-2}
+      DEBUG_MODE: ${DEBUG_MODE:-0}
+    volumes:
+      - kali-data:/data
+    # nmap SYN / OS scans need raw sockets
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+    # To scan your LAN from the host's own network (Linux only), use host
+    # networking instead of `ports:`:
+    # network_mode: host
+
+volumes:
+  kali-data:
