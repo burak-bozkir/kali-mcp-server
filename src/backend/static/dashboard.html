@@ -199,11 +199,6 @@
         .console::-webkit-scrollbar-thumb, .list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 9px; }
 
         /* Detail */
-        .detail-row { padding: 11px 0; border-bottom: 1px solid var(--border); }
-        .detail-row:last-child { border-bottom: none; }
-        .detail-row .k { font-size: 11px; color: var(--text-faint); text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
-        .detail-row .v { font-size: 13px; margin-top: 3px; word-break: break-word; }
-        .detail-row .v.mono { font-family: var(--mono); font-size: 12px; }
         .console-detail {
             font-family: var(--mono); font-size: 12px; line-height: 1.55; background: #060912; color: #cdd6e4;
             border-radius: 10px; padding: 12px; max-height: 300px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin-top: 6px;
@@ -317,9 +312,6 @@
         .sev.info { background: rgba(34,211,238,.12); color: var(--accent); }
 
         /* Recon workflow */
-        .checks { display: flex; flex-wrap: wrap; gap: 8px 16px; }
-        .checks label { display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; color: var(--text); margin: 0; cursor: pointer; }
-        .checks input[type=checkbox] { width: auto; accent-color: var(--accent); }
         .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
         .row2 label { font-size: 11px; }
         .wf-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -720,7 +712,6 @@
         const s = document.getElementById('status');
         s.textContent = msg; s.className = 'status show ' + type;
     }
-    function hideStatus() { document.getElementById('status').className = 'status'; }
     function consoleEl() { return document.getElementById('console'); }
     let lineCount = 0, autoScroll = true;
     function clearConsole() {

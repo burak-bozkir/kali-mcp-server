@@ -7,7 +7,7 @@ src/backend/
   kali_server.py   # unified server: REST API + WebSocket + serves the dashboard
   mcp_server.py    # MCP integration (exposes tools to AI agents)
   findings.py      # parses raw tool output into structured findings
-  migration.py     # one-off DB schema migration helper
+  recon.py         # chained recon logic (web-port detection, commands)
   static/          # dashboard UI (dashboard.html + local socket.io.min.js)
 src/tests/         # plain-script tests (also run by pytest)
 tests/             # pytest suite: parsers, API routes, wrapper for src/tests
@@ -62,9 +62,6 @@ to `main` and on pull requests.
 The older plain scripts still run on their own:
 
 ```bash
-# fast environment/structure check (no server needed)
-python3 src/tests/quick_test.py
-
 # database model tests
 python3 src/tests/test_db_schema.py
 

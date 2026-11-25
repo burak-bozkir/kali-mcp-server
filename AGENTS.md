@@ -1,6 +1,6 @@
-# CLAUDE.md — Kali MCP Server
+# AGENTS.md — Kali MCP Server
 
-Context for Claude Code sessions working in this repo.
+Context for AI coding agents working in this repo.
 
 ## Working with the owner
 - Communicate in **Turkish**. The owner (Burak) is a cybersecurity learner and this is a **portfolio project**.
@@ -20,6 +20,7 @@ A pentest dashboard plus an MCP server that wrap Kali tools (nmap, gobuster, dir
 - Storage is SQLite with one table per tool (`<tool>_history`) plus `scan_templates`. The 8 built-in templates are seeded on first run and protected from edit and delete.
 - Long scans: each tool has its own default timeout (`TOOL_TIMEOUTS`, env `TIMEOUT_<TOOL>`); requests can pass `timeout`. Tool endpoints go through `run_tool()`. `"async": true` returns 202, and the output is buffered per scan (`scan_registry`) and read with `GET /api/scans/<id>?since=N`. The dashboard and the recon UI **pull** output by offset; WebSocket events only nudge a pull. Don't go back to WS-only streaming: missed events lost the output. MCP tools use `run_scan()` (async + bounded wait) and return a `scan_id` for `scan_status` when a scan outlasts the MCP request.
 - Socket.IO is forced to `async_mode="threading"` (real threads + blocking subprocess). The client uses default transports (polling first), because socket.io-client 4.7 has no fallback from websocket-only.
+- Route helpers in `kali_server.py`: `@api_errors(label)` turns an exception into a logged 500 JSON error, `@tool_route(tool)` registers `POST /api/tools/<tool>` with it. Tool availability uses `shutil.which` (`TOOL_BINARIES` maps metasploit to `msfconsole`). History models are generated from one list in `TOOL_MODEL_MAPPING`.
 - Because of `shell=True`, every single user value put into a tool command (url, target, wordlist, data, username, password...) goes through `shell_arg()` (`shlex.quote`). Otherwise a URL like `?id=1&cat=2` is cut at `&`. Free-form `additional_args` / nmap `scan_type` stay unquoted on purpose (they hold several flags).
 - Scans run via `CommandExecutor` with `shell=True` in a **new process group**. Cancel and timeout kill the whole group with `os.killpg`. Keep it that way, or the tool keeps running after "cancel".
 - Security defaults: CORS is off unless `CORS_ORIGINS` is set (Socket.IO too: `cors_allowed_origins=None` = same-origin). `SECRET_KEY` is random per run if unset, and known placeholder values are ignored. `/api/command` returns 403 unless `KALI_ENABLE_COMMAND=1`; `mcp_server.py` only registers `execute_command` with `--enable-command`. There is no API auth on purpose: the owner will add a login system later instead of a token.
@@ -46,7 +47,6 @@ python3 -m pytest
 
 The plain scripts also run on their own:
 ```bash
-python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models
 python3 src/tests/test_recon.py       # recon workflow logic, no server
 python3 src/tests/test_shell_quoting.py  # user values (URLs with ?/&) quoted in tool commands
