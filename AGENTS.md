@@ -1,6 +1,6 @@
-# CLAUDE.md — Kali MCP Server
+# AGENTS.md — Kali MCP Server
 
-Context for Claude Code sessions working in this repo.
+Context for AI coding agents working in this repo.
 
 ## Working with the owner
 - Communicate in **Turkish**. The owner (Burak) is a cybersecurity learner and this is a **portfolio project**.
