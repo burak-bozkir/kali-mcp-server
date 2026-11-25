@@ -1,5 +1,7 @@
 # 🛡️ Kali MCP Server
 
+[![tests](https://github.com/burak-bozkir/kali-mcp-server/actions/workflows/tests.yml/badge.svg)](https://github.com/burak-bozkir/kali-mcp-server/actions/workflows/tests.yml)
+
 > An interactive penetration-testing dashboard and **Model Context Protocol (MCP)** server that wraps common Kali Linux security tools behind a clean web UI and an AI-agent-ready API.
 
 <p align="center">
@@ -103,7 +105,9 @@ kali-mcp-server/
 │   │   ├── recon.py            # Chained recon logic (web-port detection, commands)
 │   │   ├── migration.py        # DB schema migration helper
 │   │   └── static/             # Dashboard UI (HTML + local Socket.IO)
-│   └── tests/                  # Test suite
+│   └── tests/                  # Plain-script tests (run by pytest too)
+├── tests/                      # pytest suite (parsers, API routes)
+├── .github/workflows/tests.yml # CI: pytest on Python 3.11–3.13
 ├── docs/                       # Documentation & screenshots
 ├── scripts/                    # Startup scripts
 ├── requirements.txt
@@ -143,7 +147,16 @@ Replace the **Python path**, the **repo path**, and the **Kali VM IP**. The `exe
 
 ## 🧪 Testing
 
-The suite is plain Python scripts (no pytest needed):
+Run everything with pytest (no Kali tools or running server needed; tool runs are faked):
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest
+```
+
+`tests/test_findings.py` checks the output parsers, `tests/test_api.py` the REST routes, and `tests/test_scripts.py` runs the plain scripts below. GitHub Actions runs the same suite on every push to `main` and every pull request.
+
+The plain scripts still work on their own:
 
 ```bash
 python3 src/tests/quick_test.py       # fast environment & structure checks (no server)
