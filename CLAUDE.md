@@ -14,7 +14,7 @@ A pentest dashboard plus an MCP server that wrap Kali tools (nmap, gobuster, dir
 ## Architecture (single server)
 - `src/backend/kali_server.py` is **the** server (port 5001). It serves the REST API, the Socket.IO WebSocket and the dashboard UI from one origin. There is no separate frontend server. The old 5002 dashboard was removed on purpose; don't bring it back.
 - `src/backend/static/dashboard.html` is the UI: vanilla JS, light/dark theme, Turkish labels. `socket.io.min.js` is vendored locally so the UI works offline.
-- `src/backend/findings.py` parses raw tool output into structured, risk-rated findings (`high/medium/low/info`). It covers nmap, nikto, gobuster, dirb and sqlmap. To add a tool, write `parse_<tool>` and register it in `PARSERS`.
+- `src/backend/findings.py` parses raw tool output into structured, risk-rated findings (`high/medium/low/info`). It covers nmap, nikto, gobuster, dirb, sqlmap, hydra, wpscan (text and `--format json`) and enum4linux. To add a tool, write `parse_<tool>` and register it in `PARSERS`.
 - `src/backend/recon.py` holds the chained recon logic (web-port detection, command builders, strict arg validation). `ReconRunner` in `kali_server.py` runs it in a background thread. Workflows are stored in `recon_workflows` (steps as JSON). Endpoints: `/api/workflows/*`. MCP tools: `recon_workflow`, `recon_status`, `recon_cancel`.
 - `src/backend/mcp_server.py` is a stdio MCP server (FastMCP). It does **not** run tools; it forwards calls over HTTP to `kali_server.py` (`--server` / `KALI_API_SERVER`).
 - Storage is SQLite with one table per tool (`<tool>_history`) plus `scan_templates`. The 8 built-in templates are seeded on first run and protected from edit and delete.
@@ -50,6 +50,7 @@ python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models
 python3 src/tests/test_recon.py       # recon workflow logic, no server
 python3 src/tests/test_shell_quoting.py  # user values (URLs with ?/&) quoted in tool commands
+python3 src/tests/test_findings_parsers.py  # hydra/wpscan/enum4linux parsers on sample output
 python3 src/tests/test_security.py    # CORS off, /api/command off, SECRET_KEY
 python3 src/tests/test_system.py      # full suite; live checks need the server running
 ```
@@ -67,7 +68,7 @@ For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` 
 
 ## Roadmap (next candidates)
 1. ~~Chained recon workflow (nmap → gobuster/nikto)~~ — done.
-2. More parsers: hydra, wpscan, enum4linux.
+2. ~~More parsers: hydra, wpscan, enum4linux~~ — done.
 3. ~~Docker / `docker compose up`~~ — done.
 4. Scope allowlist guardrail for MCP and UI (AI-security angle).
 5. RBAC, scheduled scans, alerting.

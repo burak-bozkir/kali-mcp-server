@@ -272,7 +272,8 @@ DELETE /api/history?tool=nmap              # clear all, or one tool
 GET /api/history/<id>/findings
 ```
 Returns structured, risk-rated findings parsed from the scan output
-(supported: nmap, nikto, gobuster, dirb, sqlmap):
+(supported: nmap, nikto, gobuster, dirb, sqlmap, hydra, wpscan, enum4linux;
+others return `"supported": false`):
 
 ```json
 {

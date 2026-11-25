@@ -18,7 +18,7 @@ Kali MCP Server turns a set of command-line security tools (nmap, sqlmap, gobust
 - **Real-time scan streaming that survives long scans** — scans start asynchronously and their output is buffered on the server. The dashboard pulls it by offset, with WebSocket pushes for low latency, so a 30-minute gobuster run keeps streaming even if the socket drops or you reload the page. Gobuster shows a real % progress bar. A working **cancel** button kills the whole process group (not just the shell).
 - **Per-tool timeouts** — sensible defaults per tool (nmap 15 min, gobuster/nikto/sqlmap 30 min, hydra 1 h), overridable per scan from the UI/API/MCP or via `TIMEOUT_<TOOL>` env vars. A timeout keeps the partial output.
 - **Chained recon workflow** — one click (or one MCP call) runs nmap, detects every web port (http/https, 8080, 8443, ...) and follows up with gobuster and nikto automatically. In the dashboard it is the first card under Scan Templates, and each step (nmap, gobuster, nikto) takes its own parameters. You get live per-step progress, combined risk-rated findings and one PDF report for the whole run.
-- **Structured findings** — raw output from nmap / nikto / gobuster / dirb / sqlmap is parsed into open ports and risk-rated findings (high / medium / low / info), filterable by category in the dashboard.
+- **Structured findings** — raw output from nmap / nikto / gobuster / dirb / sqlmap / hydra / wpscan / enum4linux is parsed into open ports and risk-rated findings (high / medium / low / info), filterable by category in the dashboard.
 - **Scan templates** — 8 built-in templates plus your own saved configurations, with one-click launch.
 - **PDF reports** — per-scan and summary reports with a branded layout, findings section, and full Unicode (Turkish) support.
 - **Modern UI** — responsive dashboard with a light/dark theme toggle and a live tool-availability panel.
@@ -212,6 +212,7 @@ python3 src/tests/quick_test.py       # fast environment & structure checks (no 
 python3 src/tests/test_db_schema.py   # database model tests
 python3 src/tests/test_recon.py       # recon workflow logic (no server, no Kali tools)
 python3 src/tests/test_shell_quoting.py  # URLs with ?/& reach the tools as one argument
+python3 src/tests/test_findings_parsers.py  # hydra / wpscan / enum4linux findings parsers
 python3 src/tests/test_security.py    # CORS off, /api/command off, SECRET_KEY not a public default
 # then start the server and run the full suite (incl. live API checks):
 python3 src/tests/test_system.py
@@ -226,7 +227,6 @@ The project is feature-complete but built to grow. Planned next:
 - **User management & RBAC** — authentication and role-based access to scans and reports.
 - **Scheduled scans** — cron-style recurring scans with result diffing.
 - **Alerting** — notify on new high-risk findings (webhook / email / Discord).
-- **More parsers** — extend structured findings to Hydra, WPScan and Enum4linux.
 - ~~**Docker**~~ — done: `docker compose up` (see [Docker](#-docker-one-command)).
 - **Scope allowlist** — only allow scans (UI and MCP) against approved targets/CIDRs.
 

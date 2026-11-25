@@ -12,7 +12,8 @@ import pytest
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "src" / "tests"
 SCRIPTS = ["quick_test.py", "test_db_schema.py", "test_recon.py",
-           "test_shell_quoting.py", "test_security.py", "test_system.py"]
+           "test_shell_quoting.py", "test_findings_parsers.py", "test_security.py",
+           "test_system.py"]
 
 
 @pytest.mark.parametrize("script", SCRIPTS)

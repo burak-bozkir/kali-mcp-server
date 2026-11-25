@@ -222,7 +222,8 @@ class TestSqlmap:
 # --------------------------------------------------------------------------- dispatcher
 class TestParseFindings:
     def test_registered_parsers(self):
-        assert set(findings.PARSERS) == {"nmap", "nikto", "gobuster", "dirb", "sqlmap"}
+        assert set(findings.PARSERS) == {"nmap", "nikto", "gobuster", "dirb", "sqlmap",
+                                         "hydra", "wpscan", "enum4linux"}
 
     def test_dispatch_by_tool_name_is_case_insensitive(self):
         res = findings.parse_findings(" NMAP ", "", NMAP_OUTPUT)
@@ -234,7 +235,7 @@ class TestParseFindings:
         assert res["tool"] == "gobuster" and len(res["findings"]) == 5
 
     def test_unsupported_tool(self):
-        res = findings.parse_findings("hydra", "hydra -l admin", "whatever")
+        res = findings.parse_findings("john", "john hashes.txt", "whatever")
         assert res["supported"] is False and res["findings"] == []
 
     def test_none_output_is_safe(self):
