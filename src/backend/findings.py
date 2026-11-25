@@ -21,8 +21,9 @@ Each parser takes the raw stdout (and command) of a scan and returns a dict:
 Severities: "high" | "medium" | "low" | "info"
 """
 
+import json
 import re
-from typing import Dict, Any, List
+from typing import Any, Dict
 
 SEVERITIES = ("high", "medium", "low", "info")
 _SEV_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3}
@@ -72,16 +73,10 @@ def _empty(tool: str, supported: bool = True) -> Dict[str, Any]:
 
 
 def _finalize(result: Dict[str, Any]) -> Dict[str, Any]:
-    counts = {"high": 0, "medium": 0, "low": 0, "info": 0}
-    for f in result["findings"]:
-        sev = f.get("severity", "info")
-        counts[sev] = counts.get(sev, 0) + 1
-    result["summary"] = {
-        "open_ports": len(result["ports"]),
-        "high": counts["high"], "medium": counts["medium"],
-        "low": counts["low"], "info": counts["info"],
-        "total": len(result["findings"]),
-    }
+    sevs = [f.get("severity", "info") for f in result["findings"]]
+    result["summary"] = {"open_ports": len(result["ports"]),
+                         **{sev: sevs.count(sev) for sev in SEVERITIES},
+                         "total": len(sevs)}
     return result
 
 
@@ -186,10 +181,8 @@ def parse_nikto(stdout: str, command: str = "") -> Dict[str, Any]:
         elif re.search(r'osvdb|outdated|deprecated|allowed http methods|\bput\b|\bdelete\b|'
                        r'\btrace\b|directory indexing|admin|phpinfo|backup|config', text, re.I):
             sev = "medium"
-        elif re.search(r'header|cookie|x-|clickjack|autocomplete|charset', text, re.I):
-            sev = "low"
         else:
-            sev = "low"
+            sev = "low"   # headers, cookies and everything else
         result["findings"].append({"title": text[:120], "detail": text if len(text) > 120 else "", "severity": sev})
     return _finalize(result)
 
@@ -444,7 +437,6 @@ def parse_wpscan(stdout: str, command: str = "") -> Dict[str, Any]:
     text = stdout.strip()
     if text.startswith("{"):
         try:
-            import json
             _parse_wpscan_json(json.loads(text), result)
             return _finalize(result)
         except ValueError:
