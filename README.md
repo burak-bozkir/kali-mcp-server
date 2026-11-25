@@ -40,6 +40,10 @@ Kali MCP Server turns a set of command-line security tools (nmap, sqlmap, gobust
 > Requires **Python 3.8+** running on **Kali Linux** (or any host with the tools installed). Use `python3` / `pip3` — not the legacy Python 2 `pip`.
 
 ```bash
+# 0. get the code
+git clone https://github.com/burak-bozkir/kali-mcp-server.git
+cd kali-mcp-server
+
 # 1. (recommended) create a virtual environment
 python3 -m venv .venv
 source .venv/bin/activate
@@ -184,14 +188,14 @@ Add this to `claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desk
       "command": "C:\\path\\to\\python.exe",
       "args": [
         "C:\\path\\to\\kali-mcp-server\\src\\backend\\mcp_server.py",
-        "--server", "http://192.168.1.50:5001"
+        "--server", "http://<kali-ip>:5001"
       ]
     }
   }
 }
 ```
 
-Replace the **Python path**, the **repo path**, and the **Kali VM IP**. The `execute_command` tool (any shell command) is only exposed when you add `"--enable-command"` to `args` **and** start the server with `KALI_ENABLE_COMMAND=1`. The Python you point to must have the MCP deps installed (`pip install mcp requests`). Restart Claude Desktop and the `kali` tools appear.
+Replace the **Python path**, the **repo path**, and `<kali-ip>` with your Kali machine's IP. The `execute_command` tool (any shell command) is only exposed when you add `"--enable-command"` to `args` **and** start the server with `KALI_ENABLE_COMMAND=1`. The Python you point to must have the MCP deps installed (`pip install mcp requests`). Restart Claude Desktop and the `kali` tools appear.
 
 ## 🧪 Testing
 

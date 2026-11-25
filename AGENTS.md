@@ -1,12 +1,11 @@
 # AGENTS.md — Kali MCP Server
 
-Context for AI coding agents working in this repo.
+Notes for contributors and AI coding agents working in this repo: how the code is laid out, the rules that keep it working, and how to test it.
 
-## Working with the owner
-- Communicate in **Turkish**. The owner (Burak) is a cybersecurity learner and this is a **portfolio project**.
-- Explain changes step by step. He is fine reading Python but prefers ready-to-run code and exact commands.
-- Give **PowerShell** commands for the Windows repo copy and **bash** commands for Kali.
-- Don't commit or push unless asked. When asked, use clear conventional messages (`fix:`, `feat:`, `docs:`).
+## Conventions
+- Commit messages follow Conventional Commits (`fix:`, `feat:`, `docs:`, `refactor:`, `test:`, `chore:`).
+- Explain non-obvious changes in the PR description, and keep the docs listed below in sync.
+- Keep personal or machine-specific data (local paths, IPs, hostnames, names, emails) out of the repo. Use placeholders such as `<kali-ip>` or `/path/to/kali-mcp-server`.
 
 ## What this is
 A pentest dashboard plus an MCP server that wrap Kali tools (nmap, gobuster, dirb, nikto, sqlmap, enum4linux, wpscan, hydra, john, metasploit) behind a web UI and an AI-agent API.
@@ -23,7 +22,7 @@ A pentest dashboard plus an MCP server that wrap Kali tools (nmap, gobuster, dir
 - Route helpers in `kali_server.py`: `@api_errors(label)` turns an exception into a logged 500 JSON error, `@tool_route(tool)` registers `POST /api/tools/<tool>` with it. Tool availability uses `shutil.which` (`TOOL_BINARIES` maps metasploit to `msfconsole`). History models are generated from one list in `TOOL_MODEL_MAPPING`.
 - Because of `shell=True`, every single user value put into a tool command (url, target, wordlist, data, username, password...) goes through `shell_arg()` (`shlex.quote`). Otherwise a URL like `?id=1&cat=2` is cut at `&`. Free-form `additional_args` / nmap `scan_type` stay unquoted on purpose (they hold several flags).
 - Scans run via `CommandExecutor` with `shell=True` in a **new process group**. Cancel and timeout kill the whole group with `os.killpg`. Keep it that way, or the tool keeps running after "cancel".
-- Security defaults: CORS is off unless `CORS_ORIGINS` is set (Socket.IO too: `cors_allowed_origins=None` = same-origin). `SECRET_KEY` is random per run if unset, and known placeholder values are ignored. `/api/command` returns 403 unless `KALI_ENABLE_COMMAND=1`; `mcp_server.py` only registers `execute_command` with `--enable-command`. There is no API auth on purpose: the owner will add a login system later instead of a token.
+- Security defaults: CORS is off unless `CORS_ORIGINS` is set (Socket.IO too: `cors_allowed_origins=None` = same-origin). `SECRET_KEY` is random per run if unset, and known placeholder values are ignored. `/api/command` returns 403 unless `KALI_ENABLE_COMMAND=1`; `mcp_server.py` only registers `execute_command` with `--enable-command`. There is no API auth yet: run the server on localhost or a trusted lab network (see *Roadmap*).
 - PDFs come from ReportLab with a registered DejaVu font, so Turkish characters render. Without reportlab, the endpoints return 503.
 
 ## Run
@@ -58,9 +57,8 @@ For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` 
 
 ## Environment gotchas
 - `mcp` is pinned `<2`: mcp 2.x removed `mcp.server.fastmcp` (renamed to `MCPServer`).
-- On the owner's Kali VM, bare `pip` points to **Python 2.7**. Always use `python3 -m pip` or a venv.
-- Two copies exist: the Windows repo (`C:\Users\bzkr_\OneDrive\Masaüstü\kalimcp`, git remote `burak-bozkir/kali-mcp-server`) and a separate copy on the Kali VM (`~/Desktop/kalimcp`). Edits on Windows reach Kali only through git push and pull, or by copying.
-- Claude Desktop runs on Windows and the tools run in a Kali VM (VirtualBox). The MCP link is HTTP to `<vm-ip>:5001`, not SSH.
+- On some Kali installs, bare `pip` still points to **Python 2.7**. Always use `python3 -m pip` or a venv.
+- A common setup is an MCP client on the host OS (e.g. Windows) and the tools in a Kali VM. The MCP link is HTTP to `<kali-ip>:5001`, not SSH. If you edit the code on the host, the VM only sees the change after a git push/pull or a copy.
 - Never commit `*.db`, `instance/`, `.env` or `.venv/` (already in `.gitignore`).
 
 ## Docs to keep in sync
@@ -71,9 +69,7 @@ For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` 
 2. ~~More parsers: hydra, wpscan, enum4linux~~ — done.
 3. ~~Docker / `docker compose up`~~ — done.
 4. Scope allowlist guardrail for MCP and UI (AI-security angle).
-5. RBAC, scheduled scans, alerting.
-
-The owner already declined analytics charts for now. He plans to add a login system later (2026-11-24) and declined a shared API token in the meantime.
+5. Authentication (login) and RBAC, scheduled scans, alerting.
 
 ## Legal
 Authorized testing only. Keep the legal notice in the README.

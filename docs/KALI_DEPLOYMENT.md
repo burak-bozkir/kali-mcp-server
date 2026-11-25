@@ -12,18 +12,18 @@ server — no separate dashboard process.
 **Option A — git (recommended):**
 ```bash
 cd ~
-git clone https://github.com/<your-user>/<your-repo>.git kalimcp
-cd kalimcp
+git clone https://github.com/burak-bozkir/kali-mcp-server.git
+cd kali-mcp-server
 ```
 
 **Option B — copy from another machine (scp):**
 ```bash
-scp -r ./kalimcp kali@<kali-ip>:/home/kali/
+scp -r ./kali-mcp-server kali@<kali-ip>:/home/kali/
 ```
 
 **Option C — VirtualBox/VMware shared folder:**
 ```bash
-cp -r /media/sf_kalimcp ~/kalimcp
+cp -r /media/sf_kali-mcp-server ~/kali-mcp-server
 ```
 
 ## 2. Install dependencies
@@ -32,7 +32,7 @@ Always use the **Python 3** interpreter (`python3` / `python3 -m pip`), never th
 legacy Python 2 `pip`:
 
 ```bash
-cd ~/kalimcp
+cd ~/kali-mcp-server
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -72,7 +72,7 @@ python3 src/backend/kali_server.py --port 5001 --ip 0.0.0.0
 
 ## Run as a service (optional)
 
-`/etc/systemd/system/kalimcp.service`:
+`/etc/systemd/system/kali-mcp.service`:
 ```ini
 [Unit]
 Description=Kali MCP Server
@@ -80,15 +80,15 @@ After=network.target
 
 [Service]
 User=kali
-WorkingDirectory=/home/kali/kalimcp
-ExecStart=/home/kali/kalimcp/.venv/bin/python src/backend/kali_server.py --port 5001 --ip 0.0.0.0
+WorkingDirectory=/home/kali/kali-mcp-server
+ExecStart=/home/kali/kali-mcp-server/.venv/bin/python src/backend/kali_server.py --port 5001 --ip 0.0.0.0
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
 ```bash
-sudo systemctl enable --now kalimcp
+sudo systemctl enable --now kali-mcp
 ```
 
 ## Troubleshooting
