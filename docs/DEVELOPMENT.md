@@ -55,6 +55,9 @@ python3 src/tests/test_recon.py
 # shell quoting of user values in tool commands (no server, nothing executed)
 python3 src/tests/test_shell_quoting.py
 
+# findings parsers for hydra, wpscan (text + JSON) and enum4linux (sample outputs)
+python3 src/tests/test_findings_parsers.py
+
 # security defaults: CORS off, /api/command off, SECRET_KEY (no server)
 python3 src/tests/test_security.py
 
