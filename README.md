@@ -54,6 +54,53 @@ python3 src/backend/kali_server.py --port 5001 --ip 0.0.0.0
 
 Then open the dashboard at **http://127.0.0.1:5001/**
 
+## 🐳 Docker (one command)
+
+No Kali host needed: the image is based on `kalilinux/kali-rolling` and ships the tools (nmap, gobuster, dirb, nikto, sqlmap, enum4linux, wpscan, hydra, john, wordlists), the Python deps and both servers.
+
+```bash
+docker compose up -d --build
+```
+
+Open **http://127.0.0.1:5001/**. Scan history is kept in the `kali-data` volume, so it survives `docker compose down` (`docker compose down -v` deletes it).
+
+```bash
+docker compose logs -f        # server logs
+docker compose ps             # shows "healthy" once /health answers
+docker compose down           # stop
+```
+
+**Options** (put them in `.env` next to `docker-compose.yml`, or in front of the command):
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `KALI_BIND` | `127.0.0.1` | Host address the port is published on. `0.0.0.0` makes the panel reachable from the LAN (needed when Claude Desktop runs on another machine) |
+| `INSTALL_METASPLOIT` | `false` | `true` adds `metasploit-framework` to the image (~1.5 GB more). Rebuild after changing it |
+| `KALI_ENABLE_COMMAND`, `SECRET_KEY`, `CORS_ORIGINS`, timeouts… | as in [Configuration](#️-configuration) | Passed through to the server |
+
+```bash
+# example: LAN access + Metasploit
+KALI_BIND=0.0.0.0 INSTALL_METASPLOIT=true docker compose up -d --build
+```
+
+**MCP with Docker.** `mcp_server.py` is in the image as well. If Claude Desktop runs on the same machine as Docker, let it start the MCP server inside the container (no local Python needed):
+
+```json
+{
+  "mcpServers": {
+    "kali": {
+      "command": "docker",
+      "args": ["exec", "-i", "kali-mcp", "python3", "src/backend/mcp_server.py",
+               "--server", "http://127.0.0.1:5001"]
+    }
+  }
+}
+```
+
+If Docker runs in the Kali VM and Claude Desktop on Windows, start it with `KALI_BIND=0.0.0.0` and use the normal config from [MCP Integration](#-mcp-integration-claude-desktop) with `--server http://<vm-ip>:5001`.
+
+**Network notes.** The container has `NET_RAW`/`NET_ADMIN`, so nmap SYN and OS scans work. Scans go out through Docker's NAT, which is fine for most targets. To scan from the host's own network interface (e.g. a lab subnet only the host sees), uncomment `network_mode: host` in `docker-compose.yml` and remove `ports:` (Linux only).
+
 ## ⚙️ Configuration
 
 Set via environment variables (see [`.env.example`](.env.example)):
@@ -110,6 +157,8 @@ kali-mcp-server/
 ├── .github/workflows/tests.yml # CI: pytest on Python 3.11–3.13
 ├── docs/                       # Documentation & screenshots
 ├── scripts/                    # Startup scripts
+├── Dockerfile                  # All-in-one Kali image
+├── docker-compose.yml          # `docker compose up` on port 5001
 ├── requirements.txt
 ├── .env.example
 └── LICENSE
@@ -178,6 +227,7 @@ The project is feature-complete but built to grow. Planned next:
 - **Scheduled scans** — cron-style recurring scans with result diffing.
 - **Alerting** — notify on new high-risk findings (webhook / email / Discord).
 - **More parsers** — extend structured findings to Hydra, WPScan and Enum4linux.
+- ~~**Docker**~~ — done: `docker compose up` (see [Docker](#-docker-one-command)).
 - **Scope allowlist** — only allow scans (UI and MCP) against approved targets/CIDRs.
 
 ## ⚠️ Legal & Ethical Notice

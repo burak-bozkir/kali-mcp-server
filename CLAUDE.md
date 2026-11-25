@@ -32,6 +32,7 @@ pip install -r requirements.txt
 python3 src/backend/kali_server.py --port 5001 --ip 0.0.0.0
 # open http://127.0.0.1:5001/
 ```
+Docker: `docker compose up -d --build` (Kali base image with the tools, DB in the `kali-data` volume at `/data`, port published on `KALI_BIND`, default `127.0.0.1`; Metasploit only with `INSTALL_METASPLOIT=true`). MCP inside the container: `docker exec -i kali-mcp python3 src/backend/mcp_server.py --server http://127.0.0.1:5001`.
 
 ## Test
 Main entry point is pytest (`pytest.ini` limits it to `tests/`). No Kali tools or server needed: `tests/conftest.py` fakes `CommandExecutor.execute`.
@@ -67,7 +68,7 @@ For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` 
 ## Roadmap (next candidates)
 1. ~~Chained recon workflow (nmap → gobuster/nikto)~~ — done.
 2. More parsers: hydra, wpscan, enum4linux.
-3. Docker / `docker compose up`.
+3. ~~Docker / `docker compose up`~~ — done.
 4. Scope allowlist guardrail for MCP and UI (AI-security angle).
 5. RBAC, scheduled scans, alerting.
 

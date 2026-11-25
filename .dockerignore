@@ -1,0 +1,15 @@
+.git
+.github
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+*.db
+*.sqlite
+*.sqlite3
+src/backend/instance
+.env
+*.log
+docs
+scripts
