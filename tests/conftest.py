@@ -19,7 +19,7 @@ BACKEND = ROOT / "src" / "backend"
 sys.path.insert(0, str(BACKEND))
 
 # Must happen before kali_server is imported (it reads them at import time)
-os.environ["DATABASE_PATH"] = os.path.join(tempfile.mkdtemp(prefix="kalimcp-pytest-"), "test.db")
+os.environ["DATABASE_PATH"] = os.path.join(tempfile.mkdtemp(prefix="kali-mcp-pytest-"), "test.db")
 for _var in ("KALI_ENABLE_COMMAND", "CORS_ORIGINS", "SECRET_KEY"):
     os.environ.pop(_var, None)
 
