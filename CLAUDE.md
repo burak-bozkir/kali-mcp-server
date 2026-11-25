@@ -46,7 +46,6 @@ python3 -m pytest
 
 The plain scripts also run on their own:
 ```bash
-python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models
 python3 src/tests/test_recon.py       # recon workflow logic, no server
 python3 src/tests/test_shell_quoting.py  # user values (URLs with ?/&) quoted in tool commands

@@ -313,26 +313,6 @@ class BaseScanRecord(db.Model):
         return data
 
 
-# Backward compatibility: Keep ScanRecord for migration
-class ScanRecord(db.Model):
-    """Legacy model - used for migration from old single-table schema"""
-    __tablename__ = 'scan_history'
-    
-    id = db.Column(db.String(36), primary_key=True)
-    command = db.Column(db.String(500), nullable=False)
-    tool_name = db.Column(db.String(50), nullable=True)
-    target = db.Column(db.String(255), nullable=True)
-    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    duration = db.Column(db.Float, nullable=False, default=0.0)
-    success = db.Column(db.Boolean, nullable=False, default=False)
-    return_code = db.Column(db.Integer, nullable=False, default=-1)
-    timed_out = db.Column(db.Boolean, nullable=False, default=False)
-    stdout = db.Column(db.Text, nullable=True)
-    stderr = db.Column(db.Text, nullable=True)
-    stdout_length = db.Column(db.Integer, nullable=False, default=0)
-    stderr_length = db.Column(db.Integer, nullable=False, default=0)
-
-
 # ============================================================================
 # Tool-Specific Models (10 Kali Tools)
 # ============================================================================

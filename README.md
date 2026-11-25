@@ -150,7 +150,6 @@ kali-mcp-server/
 │   │   ├── mcp_server.py       # MCP integration for AI agents
 │   │   ├── findings.py         # Parses raw output → structured findings
 │   │   ├── recon.py            # Chained recon logic (web-port detection, commands)
-│   │   ├── migration.py        # DB schema migration helper
 │   │   └── static/             # Dashboard UI (HTML + local Socket.IO)
 │   └── tests/                  # Plain-script tests (run by pytest too)
 ├── tests/                      # pytest suite (parsers, API routes)
@@ -208,7 +207,6 @@ python3 -m pytest
 The plain scripts still work on their own:
 
 ```bash
-python3 src/tests/quick_test.py       # fast environment & structure checks (no server)
 python3 src/tests/test_db_schema.py   # database model tests
 python3 src/tests/test_recon.py       # recon workflow logic (no server, no Kali tools)
 python3 src/tests/test_shell_quoting.py  # URLs with ?/& reach the tools as one argument
