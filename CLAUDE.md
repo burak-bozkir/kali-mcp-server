@@ -32,9 +32,19 @@ pip install -r requirements.txt
 python3 src/backend/kali_server.py --port 5001 --ip 0.0.0.0
 # open http://127.0.0.1:5001/
 ```
+Docker: `docker compose up -d --build` (Kali base image with the tools, DB in the `kali-data` volume at `/data`, port published on `KALI_BIND`, default `127.0.0.1`; Metasploit only with `INSTALL_METASPLOIT=true`). MCP inside the container: `docker exec -i kali-mcp python3 src/backend/mcp_server.py --server http://127.0.0.1:5001`.
 
 ## Test
-The tests are plain scripts, not pytest:
+Main entry point is pytest (`pytest.ini` limits it to `tests/`). No Kali tools or server needed: `tests/conftest.py` fakes `CommandExecutor.execute`.
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest
+```
+- `tests/test_findings.py`: parsers. `tests/test_api.py`: REST routes. `tests/test_scripts.py`: runs the plain scripts in `src/tests/` as subprocesses.
+- CI: `.github/workflows/tests.yml` (push to main, PRs; Python 3.11-3.13).
+- The scripts in `src/tests/` run checks at import time, so pytest must not collect them directly.
+
+The plain scripts also run on their own:
 ```bash
 python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models
@@ -59,7 +69,7 @@ For end-to-end checks without Kali, put fake `nmap`/`nikto`/`gobuster`/`sqlmap` 
 ## Roadmap (next candidates)
 1. ~~Chained recon workflow (nmap → gobuster/nikto)~~ — done.
 2. ~~More parsers: hydra, wpscan, enum4linux~~ — done.
-3. Docker / `docker compose up`.
+3. ~~Docker / `docker compose up`~~ — done.
 4. Scope allowlist guardrail for MCP and UI (AI-security angle).
 5. RBAC, scheduled scans, alerting.
 
