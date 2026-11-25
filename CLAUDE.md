@@ -34,7 +34,16 @@ python3 src/backend/kali_server.py --port 5001 --ip 0.0.0.0
 ```
 
 ## Test
-The tests are plain scripts, not pytest:
+Main entry point is pytest (`pytest.ini` limits it to `tests/`). No Kali tools or server needed: `tests/conftest.py` fakes `CommandExecutor.execute`.
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest
+```
+- `tests/test_findings.py`: parsers. `tests/test_api.py`: REST routes. `tests/test_scripts.py`: runs the plain scripts in `src/tests/` as subprocesses.
+- CI: `.github/workflows/tests.yml` (push to main, PRs; Python 3.11-3.13).
+- The scripts in `src/tests/` run checks at import time, so pytest must not collect them directly.
+
+The plain scripts also run on their own:
 ```bash
 python3 src/tests/quick_test.py       # env/structure, no server needed
 python3 src/tests/test_db_schema.py   # DB models

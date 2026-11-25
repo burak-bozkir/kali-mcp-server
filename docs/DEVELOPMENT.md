@@ -9,7 +9,9 @@ src/backend/
   findings.py      # parses raw tool output into structured findings
   migration.py     # one-off DB schema migration helper
   static/          # dashboard UI (dashboard.html + local socket.io.min.js)
-src/tests/         # test suite
+src/tests/         # plain-script tests (also run by pytest)
+tests/             # pytest suite: parsers, API routes, wrapper for src/tests
+.github/workflows/ # CI (pytest on Python 3.11-3.13)
 scripts/           # start_api.sh / start_api.bat launchers
 docs/              # documentation
 ```
@@ -41,6 +43,23 @@ Open **http://127.0.0.1:5001/**. Or use the launcher: `scripts/start_api.sh` (Li
   `recon.plan_web_steps` and give the tool a parser in `findings.py`.
 
 ## Testing
+
+The pytest suite needs no Kali tools and no running server. `tests/conftest.py`
+replaces `CommandExecutor.execute`, so a tool endpoint builds its real command and
+records history, but nothing is executed.
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest                      # everything
+python3 -m pytest tests/test_findings.py -v   # only the parsers
+```
+
+When you add a parser to `findings.py`, add sample output and cases to
+`tests/test_findings.py`. When you add an endpoint, add a route test to
+`tests/test_api.py`. CI (`.github/workflows/tests.yml`) runs the suite on every push
+to `main` and on pull requests.
+
+The older plain scripts still run on their own:
 
 ```bash
 # fast environment/structure check (no server needed)
